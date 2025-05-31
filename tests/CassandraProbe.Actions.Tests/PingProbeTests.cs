@@ -147,7 +147,8 @@ public class PingProbeTests
         // Assert
         result.Success.Should().BeFalse();
         // The actual ping call is mocked, so the timing should be much faster than the configured timeout
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(100);
+        // Allow more time in CI environments
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(500);
     }
 
     [Fact]

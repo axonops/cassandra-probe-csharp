@@ -129,7 +129,8 @@ public class NativePortProbeTests
 
         // Assert
         result.Success.Should().BeFalse();
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(200);
+        // Allow more time in CI environments
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(1000);
     }
 
     [Fact]

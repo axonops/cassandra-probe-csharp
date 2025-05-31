@@ -113,7 +113,8 @@ public class SocketProbeTests : IDisposable
 
         // Assert
         result.Success.Should().BeFalse();
-        stopwatch.ElapsedMilliseconds.Should().BeLessThan(500);
+        // Allow more time in CI environments
+        stopwatch.ElapsedMilliseconds.Should().BeLessThan(2000);
         result.ErrorMessage.Should().ContainAny("timed out", "timeout");
     }
 

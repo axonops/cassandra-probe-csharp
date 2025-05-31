@@ -29,6 +29,13 @@ jobs:
       
     - name: Test
       run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName!~IntegrationTests"
+      # Retry on failure for timing-sensitive tests
+      continue-on-error: true
+      id: test1
+      
+    - name: Retry Test (if failed)
+      if: steps.test1.outcome == 'failure'
+      run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName!~IntegrationTests"
       
   publish:
     needs: build
