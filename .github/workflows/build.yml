@@ -27,15 +27,30 @@ jobs:
     - name: Build
       run: dotnet build --no-restore
       
-    - name: Test
-      run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName!~IntegrationTests"
-      # Retry on failure for timing-sensitive tests
-      continue-on-error: true
-      id: test1
+    - name: Test Core
+      run: dotnet test tests/CassandraProbe.Core.Tests --no-build --verbosity normal
       
-    - name: Retry Test (if failed)
-      if: steps.test1.outcome == 'failure'
-      run: dotnet test --no-build --verbosity normal --filter "FullyQualifiedName!~IntegrationTests"
+    - name: Test Services
+      run: dotnet test tests/CassandraProbe.Services.Tests --no-build --verbosity normal
+      
+    - name: Test Actions
+      run: dotnet test tests/CassandraProbe.Actions.Tests --no-build --verbosity normal
+      
+    - name: Test Scheduling
+      run: dotnet test tests/CassandraProbe.Scheduling.Tests --no-build --verbosity normal
+      
+    - name: Test Logging
+      run: dotnet test tests/CassandraProbe.Logging.Tests --no-build --verbosity normal
+      
+    - name: Test CLI
+      run: dotnet test tests/CassandraProbe.Cli.Tests --no-build --verbosity normal
+      
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.os }}
+        path: ./TestResults
       
   publish:
     needs: build
