@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-and-release:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact_name: cassandra-probe
+            asset_extension: .tar.gz
+          - os: windows-latest
+            runtime: win-x64
+            artifact_name: cassandra-probe.exe
+            asset_extension: .zip
+          - os: macos-latest
+            runtime: osx-x64
+            artifact_name: cassandra-probe
+            asset_extension: .tar.gz
+          - os: macos-latest
+            runtime: osx-arm64
+            artifact_name: cassandra-probe
+            asset_extension: .tar.gz
+    
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Build
+      run: dotnet build --configuration Release --no-restore
+    
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal --filter "FullyQualifiedName!~IntegrationTests"
+    
+    - name: Publish standalone executable
+      run: |
+        dotnet publish src/CassandraProbe.Cli -c Release -r ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=None -p:DebugSymbols=false -o ./publish
+    
+    - name: Package Windows
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        Compress-Archive -Path ./publish/${{ matrix.artifact_name }} -DestinationPath ./cassandra-probe-${{ steps.get_version.outputs.VERSION }}-${{ matrix.runtime }}.zip
+    
+    - name: Package Unix
+      if: matrix.os != 'windows-latest'
+      run: |
+        chmod +x ./publish/${{ matrix.artifact_name }}
+        tar -czf ./cassandra-probe-${{ steps.get_version.outputs.VERSION }}-${{ matrix.runtime }}.tar.gz -C ./publish ${{ matrix.artifact_name }}
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: cassandra-probe-${{ matrix.runtime }}
+        path: ./cassandra-probe-${{ steps.get_version.outputs.VERSION }}-${{ matrix.runtime }}${{ matrix.asset_extension }}
+  
+  create-release:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Get version from tag
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./release
+    
+    - name: Display structure of downloaded files
+      run: ls -la ./release/*/
+    
+    - name: Move files to release directory
+      run: |
+        mkdir -p ./final-release
+        mv ./release/*/* ./final-release/
+        cd ./final-release
+        sha256sum * > SHA256SUMS
+        cd ..
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        name: Release v${{ steps.get_version.outputs.VERSION }}
+        body: |
+          ## Cassandra Probe ${{ steps.get_version.outputs.VERSION }}
+          
+          ### Download
+          
+          Download the appropriate standalone executable for your platform:
+          - **Windows x64**: `cassandra-probe-${{ steps.get_version.outputs.VERSION }}-win-x64.zip`
+          - **Linux x64**: `cassandra-probe-${{ steps.get_version.outputs.VERSION }}-linux-x64.tar.gz`
+          - **macOS x64 (Intel)**: `cassandra-probe-${{ steps.get_version.outputs.VERSION }}-osx-x64.tar.gz`
+          - **macOS ARM64 (Apple Silicon)**: `cassandra-probe-${{ steps.get_version.outputs.VERSION }}-osx-arm64.tar.gz`
+          
+          ### Installation
+          
+          #### Linux/macOS
+          ```bash
+          # Download and extract
+          tar -xzf cassandra-probe-${{ steps.get_version.outputs.VERSION }}-<platform>.tar.gz
+          
+          # Make executable
+          chmod +x cassandra-probe
+          
+          # Run
+          ./cassandra-probe --help
+          ```
+          
+          #### Windows
+          ```powershell
+          # Extract
+          Expand-Archive cassandra-probe-${{ steps.get_version.outputs.VERSION }}-win-x64.zip
+          
+          # Run
+          .\cassandra-probe.exe --help
+          ```
+          
+          ### Features
+          
+          This is a standalone executable that includes the .NET runtime. You don't need to install .NET to run it.
+          
+          ### Verification
+          
+          Use the SHA256SUMS file to verify the integrity of your download:
+          ```bash
+          sha256sum -c SHA256SUMS
+          ```
+        draft: false
+        prerelease: false
+        files: |
+          ./final-release/*
