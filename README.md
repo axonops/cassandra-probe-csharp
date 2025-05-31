@@ -246,6 +246,45 @@ CassandraProbe/
 └── CLI/         # Command-line interface
 ```
 
+## 📦 Software Bill of Materials (SBOM)
+
+Every release includes Software Bill of Materials (SBOM) files in CycloneDX format:
+- JSON format: `cassandra-probe-<version>-sbom.json`
+- XML format: `cassandra-probe-<version>-sbom.xml`
+
+These files provide a complete inventory of all dependencies used in the project, including:
+- Direct and transitive dependencies
+- Version information
+- License details
+- Security vulnerability tracking
+
+### Generating SBOM Locally
+
+To generate an SBOM for the current source:
+
+```bash
+# Install CycloneDX tool
+dotnet tool install --global CycloneDX
+
+# Generate SBOM in JSON format
+dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
+
+# Generate SBOM in XML format
+dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
+```
+
+### Key Dependencies
+
+The project uses the following major dependencies:
+- **DataStax C# Driver for Apache Cassandra** - Core database connectivity
+- **Polly** - Resilience and retry policies
+- **Serilog** - Structured logging
+- **Quartz.NET** - Job scheduling
+- **CommandLineParser** - CLI argument parsing
+- **YamlDotNet** - YAML configuration support
+
+For a complete list, refer to the SBOM files in the release artifacts.
+
 ## 🤝 Contributing
 
 See [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) and [IMPLEMENTATION-ROADMAP.md](docs/IMPLEMENTATION-ROADMAP.md) for development guidelines.

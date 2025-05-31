@@ -73,9 +73,47 @@ jobs:
         path: cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-${{ matrix.runtime }}.*
         retention-days: 1
 
+  sbom:
+    name: Generate SBOM
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    
+    - name: Get tag name
+      id: tag
+      shell: bash
+      run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+    
+    - name: Install CycloneDX tool
+      run: dotnet tool install --global CycloneDX
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Generate SBOM
+      run: |
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
+        mv bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
+        mv bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+    
+    - name: Upload SBOM artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom
+        path: cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.*
+        retention-days: 1
+
   release:
     name: Create Release
-    needs: build
+    needs: [build, sbom]
     runs-on: ubuntu-latest
     
     steps:
@@ -136,6 +174,12 @@ jobs:
           Expand-Archive cassandra-probe-*.zip
           .\cassandra-probe.exe --help
           ```
+          
+          ### Software Bill of Materials (SBOM)
+          
+          The SBOM files provide a complete inventory of all dependencies:
+          - `cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json` - CycloneDX format (JSON)
+          - `cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml` - CycloneDX format (XML)
           
           ### Verify Download
           
