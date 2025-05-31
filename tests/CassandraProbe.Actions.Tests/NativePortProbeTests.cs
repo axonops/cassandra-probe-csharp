@@ -149,7 +149,8 @@ public class NativePortProbeTests
         var result = await _probe.ExecuteAsync(host, context);
 
         // Assert
-        result.Metadata.Should().ContainKey("Port");
+        result.Metadata.Should().ContainKey("Port", 
+            $"Result success: {result.Success}, Error: {result.ErrorMessage}, Metadata keys: {string.Join(", ", result.Metadata.Keys)}");
         result.Metadata["Port"].Should().Be(9042);
     }
 }

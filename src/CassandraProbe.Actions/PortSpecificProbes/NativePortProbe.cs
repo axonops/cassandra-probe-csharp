@@ -76,7 +76,9 @@ public class NativePortProbe : IProbeAction
         catch (OperationCanceledException)
         {
             stopwatch.Stop();
-            return ProbeResult.CreateFailure(host, Type, "Operation timed out", stopwatch.Elapsed);
+            var result = ProbeResult.CreateFailure(host, Type, "Operation timed out", stopwatch.Elapsed);
+            result.Metadata["Port"] = host.NativePort;
+            return result;
         }
         catch (Exception ex)
         {
@@ -84,8 +86,10 @@ public class NativePortProbe : IProbeAction
             _logger.LogDebug(ex, "Native port probe failed for {Host}:{Port}", 
                 host.Address, host.NativePort);
             
-            return ProbeResult.CreateFailure(host, Type, 
+            var result = ProbeResult.CreateFailure(host, Type, 
                 $"Native port connection failed: {ex.Message}", stopwatch.Elapsed);
+            result.Metadata["Port"] = host.NativePort;
+            return result;
         }
     }
 }
