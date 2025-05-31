@@ -137,13 +137,33 @@ This helps you understand:
 ## 🔍 Example Output
 
 ```
-[2024-01-20 10:15:30] INFO - Starting probe session
-[2024-01-20 10:15:30] INFO - Connected to cluster: MyCluster (3 nodes)
-[2024-01-20 10:15:30] INFO - Datacenter: dc1, Hosts: 3 (3 up, 0 down)
-[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.10:9042 - SocketProbe (15ms)
-[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.11:9042 - SocketProbe (12ms)
-[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.12:9042 - SocketProbe (14ms)
-[2024-01-20 10:15:32] INFO - All probes completed successfully
+[2025-05-31 21:40:18.647 INF] Cassandra Probe starting... <CassandraProbe.Cli.Program>
+[2025-05-31 21:40:18.688 INF] Initialized Scheduler Signaller of type: Quartz.Core.SchedulerSignalerImpl <Quartz.Core.SchedulerSignalerImpl>
+[2025-05-31 21:40:18.688 INF] Quartz Scheduler created <Quartz.Core.QuartzScheduler>
+[2025-05-31 21:40:18.688 INF] JobFactory set to: Quartz.Simpl.MicrosoftDependencyInjectionJobFactory <Quartz.Core.QuartzScheduler>
+[2025-05-31 21:40:18.688 INF] RAMJobStore initialized. <Quartz.Simpl.RAMJobStore>
+[2025-05-31 21:40:18.689 INF] Quartz Scheduler 3.13.0.0 - 'QuartzScheduler' with instanceId 'NON_CLUSTERED' initialized <Quartz.Impl.StdSchedulerFactory>
+[2025-05-31 21:40:18.689 INF] Using thread pool 'Quartz.Simpl.DefaultThreadPool', size: 10 <Quartz.Impl.StdSchedulerFactory>
+[2025-05-31 21:40:18.689 INF] Using job store 'Quartz.Simpl.RAMJobStore', supports persistence: False, clustered: False <Quartz.Impl.StdSchedulerFactory>
+[2025-05-31 21:40:18.694 INF] Adding 0 jobs, 0 triggers. <Quartz.ContainerConfigurationProcessor>
+[2025-05-31 21:40:18.696 INF] Scheduler QuartzScheduler_$_NON_CLUSTERED started. <Quartz.Core.QuartzScheduler>
+[2025-05-31 21:40:18.696 INF] Scheduler started <CassandraProbe.Scheduling.JobScheduler>
+[2025-05-31 21:40:18.698 INF] Scheduling probe job with interval: 10 seconds <CassandraProbe.Scheduling.JobScheduler>
+[2025-05-31 21:40:18.702 INF] Probe job scheduled successfully. First run: 05/31/2025 19:40:18 <CassandraProbe.Scheduling.JobScheduler>
+[2025-05-31 21:40:18.703 INF] Probe scheduled. Press Ctrl+C to stop... <CassandraProbe.Cli.Program>
+[2025-05-31 21:40:18.711 INF] Starting scheduled probe job ProbeJob <CassandraProbe.Scheduling.ProbeJob>
+[2025-05-31 21:40:18.713 INF] Starting probe session a3d8a1ef-8427-489e-8e83-a85026436e6c <CassandraProbe.Services.ProbeOrchestrator>
+[2025-05-31 21:40:18.713 INF] Creating new Cluster instance (one-time operation) <CassandraProbe.Services.SessionManager>
+[2025-05-31 21:40:18.734 INF] Connection monitor registered with cluster, tracking 0 hosts <CassandraProbe.Services.ConnectionMonitor>
+[2025-05-31 21:40:18.981 INF] Session established and will be reused for all operations <CassandraProbe.Services.SessionManager>
+[2025-05-31 21:40:18.982 INF] Starting cluster discovery... <CassandraProbe.Services.ClusterDiscoveryService>
+[2025-05-31 21:40:19.029 INF] Discovered 11 peer nodes <CassandraProbe.Services.ClusterDiscoveryService>
+[2025-05-31 21:40:19.029 INF] Discovered 12 nodes in cluster 'axonops-webinar' <CassandraProbe.Services.ClusterDiscoveryService>
+[2025-05-31 21:40:19.029 INF] Nodes by status - Up: 12, Down: 0 <CassandraProbe.Services.ClusterDiscoveryService>
+[2025-05-31 21:40:19.030 INF] Executing 5 probe types on 12 hosts <CassandraProbe.Services.ProbeOrchestrator>
+[2025-05-31 21:40:19.117 INF] Probe session a3d8a1ef-8427-489e-8e83-a85026436e6c completed in 0.40s. Success: 60, Failures: 0 <CassandraProbe.Services.ProbeOrchestrator>
+[2025-05-31 21:40:19.125 INF] Connection pool status - Total: 0, Active: 0, Failed: 0, Reconnecting: 0 <CassandraProbe.Scheduling.ProbeJob>
+[2025-05-31 21:40:19.125 INF] Scheduled probe job ProbeJob completed in 0.41s. Next run: 05/31/2025 19:40:28 <CassandraProbe.Scheduling.ProbeJob>
 ```
 
 ## 📦 Software Bill of Materials (SBOM)
