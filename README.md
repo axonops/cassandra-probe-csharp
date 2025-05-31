@@ -1,298 +1,179 @@
-# Cassandra Probe C#
+# Cassandra Probe
 
-A comprehensive diagnostic and monitoring tool for Apache Cassandra clusters, written in C#. This is a complete port of the original Java-based [cassandra-probe](https://github.com/digitalis-io/cassandra-probe) with modern .NET features and enhanced capabilities.
+A high-performance diagnostic and monitoring tool for Apache Cassandra® clusters, designed to test driver reconnection behavior and cluster resilience.
+
+[![Build Status](https://github.com/axonops/cassandra-probe-csharp/actions/workflows/build.yml/badge.svg)](https://github.com/axonops/cassandra-probe-csharp/actions)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
+## 🎯 What is Cassandra Probe?
+
+Cassandra Probe is a standalone diagnostic tool that helps you:
+
+- **Test Cassandra driver resilience** - Validate how your applications handle node failures and recoveries
+- **Monitor cluster health** - Continuously probe your Cassandra nodes to detect issues early
+- **Verify rolling restarts** - Ensure your maintenance procedures don't impact availability
+- **Diagnose connectivity issues** - Identify network, authentication, or configuration problems
+- **Validate failover scenarios** - Test your disaster recovery procedures
+
+Unlike simple connectivity checkers, Cassandra Probe maintains persistent connections to simulate real application behavior, making it ideal for testing production scenarios.
 
 ## 🚀 Quick Start
 
+### Download
+
+Download the latest release for your platform from the [Releases](https://github.com/axonops/cassandra-probe-csharp/releases) page.
+
+| Platform | File | Description |
+|----------|------|-------------|
+| Windows | `cassandra-probe-*-win-x64.zip` | 64-bit Windows executable |
+| Linux | `cassandra-probe-*-linux-x64.tar.gz` | 64-bit Linux executable |
+| macOS Intel | `cassandra-probe-*-osx-x64.tar.gz` | Intel Mac executable |
+| macOS Apple Silicon | `cassandra-probe-*-osx-arm64.tar.gz` | M1/M2/M3 Mac executable |
+
+### Install and Run
+
+**Linux/macOS:**
 ```bash
-# Test with Docker or Podman (no authentication)
-# Using Docker:
-docker run -d --name cassandra -p 9042:9042 cassandra:4.1
-# OR using Podman:
-podman run -d --name cassandra -p 9042:9042 cassandra:4.1
+# Extract
+tar -xzf cassandra-probe-*.tar.gz
 
+# Make executable
+chmod +x cassandra-probe
+
+# Run basic connectivity test
 ./cassandra-probe --contact-points localhost:9042
+```
 
-# Test with authentication
-./cassandra-probe --contact-points localhost:9042 -u cassandra -p cassandra
+**Windows:**
+```powershell
+# Extract
+Expand-Archive cassandra-probe-*.zip
 
-# Run all probes
-./cassandra-probe --contact-points localhost:9042 --all-probes
+# Run basic connectivity test
+.\cassandra-probe.exe --contact-points localhost:9042
+```
+
+### Common Use Cases
+
+```bash
+# Test cluster with authentication
+./cassandra-probe --contact-points node1:9042,node2:9042 -u cassandra -p cassandra
+
+# Monitor cluster continuously (every 30 seconds)
+./cassandra-probe --contact-points cluster:9042 -i 30 --connection-events
+
+# Run all diagnostic probes
+./cassandra-probe --contact-points cluster:9042 --all-probes
+
+# Test specific CQL query
+./cassandra-probe --contact-points cluster:9042 --test-cql "SELECT * FROM system.local"
 ```
 
 ## 📋 Requirements
 
-- **Cassandra**: 4.0 or later (4.1 recommended)
-- **.NET Runtime**: Not required (self-contained executable)
-- **Platform**: Windows, macOS, or Linux
+- **Apache Cassandra**: 4.0 or later (Cassandra 3.x is not supported)
+- **Operating System**: Windows, Linux, or macOS
+- **Runtime**: None required (self-contained executable)
 
-**Important**: Cassandra 3.x versions are NOT supported. The probe requires features available only in Cassandra 4.0+.
+## ✨ Key Features
 
-## ✨ Features
+### Driver Reconnection Testing
+The primary purpose of Cassandra Probe is to validate Cassandra driver behavior during failure scenarios:
+- Maintains persistent connections across probe iterations
+- Logs all reconnection events and attempts
+- Simulates real application connection patterns
+- Helps validate production failover behavior
 
-- **Driver Reconnection Testing**: Test Cassandra driver's automatic recovery from node failures
-- **Cluster Discovery**: Automatically discover all nodes in the cluster
-- **Connection Persistence**: Maintains session across probes to validate reconnection behavior
-- **Connectivity Testing**: Socket, ping, and port-specific probes
-- **CQL Query Testing**: Execute queries with tracing and consistency control
-- **Flexible Authentication**: Supports clusters with or without authentication
-- **SSL/TLS Support**: Optional encrypted connections
-- **Continuous Monitoring**: Schedule probes at regular intervals with session reuse
-- **Reconnection Logging**: Detailed logs of all connection events and recovery attempts
-- **Cross-Platform**: Native executables for Windows, macOS, and Linux
+### Comprehensive Diagnostics
+- **Multiple probe types**: Socket, ping, CQL, port-specific tests
+- **Cluster discovery**: Automatically finds all nodes in the topology
+- **Detailed metrics**: Response times, error rates, success counts
+- **Flexible output**: Console, JSON, CSV, or compact formats
 
-## 🔄 Primary Use Case: Testing Driver Resilience
+### Production-Ready
+- **Zero dependencies**: Single executable file
+- **Cross-platform**: Native builds for all major platforms
+- **Lightweight**: Minimal resource usage
+- **Configurable**: YAML configuration files supported
 
-One of the main purposes of this tool is to validate the Cassandra driver's reconnection capabilities:
-- Maintains persistent connections across all probe iterations
-- Monitors and logs all reconnection attempts and successes
-- Helps validate production failover scenarios
-- Essential for testing rolling restarts and network disruptions
+## 📖 Documentation
 
-## 📦 Installation
+- [**User Guide**](docs/USER-GUIDE.md) - Comprehensive usage instructions
+- [**CLI Reference**](docs/CLI-REFERENCE.md) - All command-line options
+- [**Configuration**](docs/CONFIGURATION.md) - YAML configuration examples
+- [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
 
-### Download Pre-built Executables
+### For Developers
+- [**Building from Source**](docs/BUILD.md) - Build instructions for all platforms
+- [**Architecture**](docs/ARCHITECTURE.md) - System design and components
+- [**Contributing**](docs/CONTRIBUTING.md) - How to contribute to the project
 
-Download the latest release for your platform from the [Releases](https://github.com/axonops/cassandra-probe-csharp/releases) page:
+## 🧪 Testing Driver Reconnection
 
-- **Windows**: `cassandra-probe-win-x64.exe`
-- **macOS (Intel)**: `cassandra-probe-osx-x64`
-- **macOS (Apple Silicon)**: `cassandra-probe-osx-arm64`
-- **Linux (x64)**: `cassandra-probe-linux-x64`
-- **Linux (ARM64)**: `cassandra-probe-linux-arm64`
-
-### Build from Source
-
-#### Prerequisites
-
-- .NET 9.0 SDK or later ([Download](https://dotnet.microsoft.com/download))
-- Git
-
-#### Platform-Specific Build Instructions
-
-##### **Windows**
-
-```powershell
-# Clone the repository
-git clone https://github.com/axonops/cassandra-probe-csharp.git
-cd cassandra-probe-csharp
-
-# Build for Windows
-dotnet publish src/CassandraProbe.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish/windows
-
-# The executable will be at: publish/windows/cassandra-probe.exe
-```
-
-##### **macOS**
+One of the most valuable uses of Cassandra Probe is testing how your applications handle node failures:
 
 ```bash
-# Clone the repository
-git clone https://github.com/axonops/cassandra-probe-csharp.git
-cd cassandra-probe-csharp
-
-# Build for macOS (Intel)
-dotnet publish src/CassandraProbe.Cli -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o publish/macos-intel
-
-# Build for macOS (Apple Silicon)
-dotnet publish src/CassandraProbe.Cli -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o publish/macos-arm64
-
-# The executable will be at: publish/macos-*/cassandra-probe
-# Make it executable
-chmod +x publish/macos-*/cassandra-probe
-```
-
-##### **Debian/Ubuntu Linux**
-
-```bash
-# Install .NET SDK
-wget https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb -O packages-microsoft-prod.deb
-sudo dpkg -i packages-microsoft-prod.deb
-rm packages-microsoft-prod.deb
-sudo apt-get update && sudo apt-get install -y dotnet-sdk-9.0
-
-# Clone and build
-git clone https://github.com/axonops/cassandra-probe-csharp.git
-cd cassandra-probe-csharp
-
-# Build for Linux x64
-dotnet publish src/CassandraProbe.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux
-
-# Build for Linux ARM64 (for ARM-based systems)
-dotnet publish src/CassandraProbe.Cli -c Release -r linux-arm64 --self-contained -p:PublishSingleFile=true -o publish/linux-arm64
-
-# Make executable
-chmod +x publish/linux*/cassandra-probe
-```
-
-##### **RHEL/CentOS/Fedora Linux**
-
-```bash
-# Install .NET SDK
-sudo dnf install dotnet-sdk-9.0
-
-# Clone and build
-git clone https://github.com/axonops/cassandra-probe-csharp.git
-cd cassandra-probe-csharp
-
-# Build for Linux x64
-dotnet publish src/CassandraProbe.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o publish/linux
-
-# Make executable
-chmod +x publish/linux/cassandra-probe
-```
-
-#### Build Options
-
-- **Self-contained**: Includes .NET runtime (no installation required on target machine)
-- **Framework-dependent**: Smaller file size but requires .NET runtime installed
-
-```bash
-# Framework-dependent build (smaller size)
-dotnet publish src/CassandraProbe.Cli -c Release -r [RID] --self-contained false -p:PublishSingleFile=true
-
-# Available Runtime Identifiers (RID):
-# - win-x64, win-x86, win-arm64
-# - osx-x64, osx-arm64
-# - linux-x64, linux-arm64, linux-musl-x64
-```
-
-## 🔧 Usage Examples
-
-### Basic Connectivity Test
-```bash
-# No authentication required
-./cassandra-probe --contact-points cassandra-host:9042
-
-# With authentication
-./cassandra-probe --contact-points cassandra-host:9042 -u username -p password
-```
-
-### Run Test Queries
-```bash
-# Simple query
-./cassandra-probe --contact-points localhost:9042 --test-cql "SELECT * FROM system.local"
-
-# Query with tracing
-./cassandra-probe --contact-points localhost:9042 --test-cql "SELECT * FROM system.peers" --tracing
-```
-
-### Continuous Monitoring
-```bash
-# Probe every 30 seconds
-./cassandra-probe --contact-points localhost:9042 -i 30
-
-# Run for 10 minutes
-./cassandra-probe --contact-points localhost:9042 -i 60 -d 10
-```
-
-### Multi-Node Discovery
-```bash
-# Connect to any node - discovers all
-./cassandra-probe --contact-points node1:9042,node2:9042,node3:9042 --all-probes
-```
-
-### Test Driver Reconnection
-```bash
-# Start continuous monitoring to test reconnection
+# Start continuous monitoring
 ./cassandra-probe --contact-points cluster:9042 -i 5 --connection-events
 
 # In another terminal, stop a Cassandra node
-# Watch the probe logs show reconnection attempts and success
-# The driver should automatically reconnect when the node returns
+# Watch the probe output to see:
+# - Connection failure detection
+# - Reconnection attempts
+# - Recovery time
+# - Which nodes take over
+
+# Restart the node and observe:
+# - Reconnection success
+# - Topology changes
+# - Load rebalancing
 ```
 
-## 🧪 Local Testing
+This helps you understand:
+- How quickly your drivers detect failures
+- Whether reconnection policies work correctly
+- If your application can maintain availability during maintenance
 
-Use the included quickstart script:
-
-```bash
-# Unix/macOS
-./quickstart.sh
-
-# Windows
-powershell -ExecutionPolicy Bypass -File quickstart.ps1
-```
-
-Or use Docker Compose:
-
-```bash
-# Start test clusters
-docker-compose -f samples/docker-compose.yml up -d
-
-# Test different versions
-docker-compose -f samples/docker-compose-multiversion.yml up -d
-```
-
-## 📚 Documentation
-
-- [Overview](docs/OVERVIEW.md) - Project overview and capabilities
-- [Features](docs/FEATURES.md) - Detailed feature documentation
-- [CLI Reference](docs/CLI-REFERENCE.md) - Complete command-line options
-- [Local Testing](docs/LOCAL-TESTING.md) - Testing guide with examples
-- [Architecture](docs/ARCHITECTURE.md) - System design and patterns
-- [Cassandra Compatibility](docs/CASSANDRA-COMPATIBILITY.md) - Version compatibility guide
-
-## 🏗️ Architecture
-
-The probe follows a clean, modular architecture:
+## 🔍 Example Output
 
 ```
-CassandraProbe/
-├── Core/        # Domain models and interfaces
-├── Actions/     # Probe implementations
-├── Services/    # Business logic
-├── Scheduling/  # Job scheduling
-├── Logging/     # Structured logging
-└── CLI/         # Command-line interface
+[2024-01-20 10:15:30] INFO - Starting probe session
+[2024-01-20 10:15:30] INFO - Connected to cluster: MyCluster (3 nodes)
+[2024-01-20 10:15:30] INFO - Datacenter: dc1, Hosts: 3 (3 up, 0 down)
+[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.10:9042 - SocketProbe (15ms)
+[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.11:9042 - SocketProbe (12ms)
+[2024-01-20 10:15:31] SUCCESS - Probe: 192.168.1.12:9042 - SocketProbe (14ms)
+[2024-01-20 10:15:32] INFO - All probes completed successfully
 ```
 
 ## 📦 Software Bill of Materials (SBOM)
 
-Every release includes Software Bill of Materials (SBOM) files in CycloneDX format:
-- JSON format: `cassandra-probe-<version>-sbom.json`
-- XML format: `cassandra-probe-<version>-sbom.xml`
-
-These files provide a complete inventory of all dependencies used in the project, including:
-- Direct and transitive dependencies
-- Version information
-- License details
-- Security vulnerability tracking
-
-### Generating SBOM Locally
-
-To generate an SBOM for the current source:
-
-```bash
-# Install CycloneDX tool
-dotnet tool install --global CycloneDX
-
-# Generate SBOM in JSON format
-dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
-
-# Generate SBOM in XML format
-dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
-```
-
-### Key Dependencies
-
-The project uses the following major dependencies:
-- **DataStax C# Driver for Apache Cassandra** - Core database connectivity
-- **Polly** - Resilience and retry policies
-- **Serilog** - Structured logging
-- **Quartz.NET** - Job scheduling
-- **CommandLineParser** - CLI argument parsing
-- **YamlDotNet** - YAML configuration support
-
-For a complete list, refer to the SBOM files in the release artifacts.
+Every release includes SBOM files in CycloneDX format for security scanning and compliance:
+- `cassandra-probe-*-sbom.json` - JSON format
+- `cassandra-probe-*-sbom.xml` - XML format
 
 ## 🤝 Contributing
 
-See [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md) and [IMPLEMENTATION-ROADMAP.md](docs/IMPLEMENTATION-ROADMAP.md) for development guidelines.
+We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.md) for details.
 
 ## 📄 License
+
+Copyright © 2024 AxonOps Limited
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
 ## 🙏 Acknowledgments
 
-This project is a C# port of the original [cassandra-probe](https://github.com/digitalis-io/cassandra-probe) by Digitalis.IO.
+This project builds upon the excellent work of:
+
+- The [Apache Cassandra](https://cassandra.apache.org/) community for creating and maintaining the powerful distributed database that makes this tool necessary
+- [DataStax](https://www.datastax.com/) for the C# Driver for Apache Cassandra
+- The original [cassandra-probe](https://github.com/digitalis-io/cassandra-probe) project by Digitalis.IO, which inspired this C# implementation
+
+Apache Cassandra is a registered trademark of the Apache Software Foundation.
+
+## 🔗 Links
+
+- **Report Issues**: [GitHub Issues](https://github.com/axonops/cassandra-probe-csharp/issues)
+- **Releases**: [GitHub Releases](https://github.com/axonops/cassandra-probe-csharp/releases)
+- **AxonOps**: [https://axonops.com](https://axonops.com)
