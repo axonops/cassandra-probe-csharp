@@ -49,16 +49,7 @@ jobs:
       run: dotnet test --configuration Release --filter "FullyQualifiedName!~IntegrationTests"
     
     - name: Publish
-      run: |
-        dotnet publish src/CassandraProbe.Cli \
-          --configuration Release \
-          --runtime ${{ matrix.runtime }} \
-          --self-contained true \
-          --output ./artifacts \
-          -p:PublishSingleFile=true \
-          -p:PublishTrimmed=true \
-          -p:DebugType=None \
-          -p:DebugSymbols=false
+      run: dotnet publish src/CassandraProbe.Cli --configuration Release --runtime ${{ matrix.runtime }} --self-contained true --output ./artifacts -p:PublishSingleFile=true -p:PublishTrimmed=true -p:DebugType=None -p:DebugSymbols=false
     
     - name: Set executable permissions (Unix)
       if: runner.os != 'Windows'
