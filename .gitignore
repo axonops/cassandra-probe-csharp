@@ -447,3 +447,6 @@ logs/
 appsettings.local.json
 appsettings.*.local.json
 launchSettings.json
+
+.claude
+CLAUDE.md
