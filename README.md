@@ -178,7 +178,7 @@ We welcome contributions! Please see our [Contributing Guide](docs/CONTRIBUTING.
 
 ## 📄 License
 
-Copyright © 2024 AxonOps Limited
+Copyright © 2025 AxonOps Limited
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
