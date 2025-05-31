@@ -112,24 +112,20 @@ jobs:
         echo "=== SBOM output directory ==="
         ls -la sbom-output/
         
-        # Handle different output scenarios
-        if [ -f "sbom-output/bom.json" ]; then
-          mv sbom-output/bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
-        elif [ -f "json" ]; then
-          mv json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
+        # The tool creates files named 'json' and 'xml' without extensions
+        if [ -f "sbom-output/json" ]; then
+          mv sbom-output/json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
+          echo "✓ Created cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json"
         else
-          echo "ERROR: JSON SBOM not found!"
-          find . -name "*.json" -ls
+          echo "ERROR: sbom-output/json not found!"
           exit 1
         fi
         
-        if [ -f "sbom-output/bom.xml" ]; then
-          mv sbom-output/bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
-        elif [ -f "xml" ]; then
-          mv xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+        if [ -f "sbom-output/xml" ]; then
+          mv sbom-output/xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+          echo "✓ Created cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml"
         else
-          echo "ERROR: XML SBOM not found!"
-          find . -name "*.xml" -ls
+          echo "ERROR: sbom-output/xml not found!"
           exit 1
         fi
         
