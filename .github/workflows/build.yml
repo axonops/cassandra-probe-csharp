@@ -14,10 +14,10 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
         
@@ -45,23 +45,16 @@ jobs:
     - name: Test CLI
       run: dotnet test tests/CassandraProbe.Cli.Tests --no-build --verbosity normal
       
-    - name: Upload Test Results
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: test-results-${{ matrix.os }}
-        path: ./TestResults
-      
   publish:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Setup .NET
-      uses: actions/setup-dotnet@v3
+      uses: actions/setup-dotnet@v4
       with:
         dotnet-version: 9.0.x
         
@@ -78,7 +71,7 @@ jobs:
       run: dotnet publish src/CassandraProbe.Cli -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ./artifacts/osx-arm64
       
     - name: Upload artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: cassandra-probe-binaries
         path: ./artifacts/
