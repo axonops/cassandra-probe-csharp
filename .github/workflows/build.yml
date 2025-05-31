@@ -68,8 +68,9 @@ jobs:
     
     - name: Generate SBOM
       run: |
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom -f json
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom -f xml
+        mkdir -p sbom
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom -f json -sv 1.4 -j
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom -f xml -sv 1.4 -j
     
     - name: Upload SBOM
       uses: actions/upload-artifact@v4
