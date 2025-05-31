@@ -1,77 +1,66 @@
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using CassandraProbe.Core.Models;
 
 namespace CassandraProbe.Logging.Formatters;
 
 public class JsonFormatter
 {
-    private static readonly JsonSerializerOptions Options = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        Converters = { new JsonStringEnumConverter() }
-    };
+    private static readonly ProbeJsonSerializerContext JsonContext = ProbeJsonSerializerContext.Default;
 
     public static string FormatResult(ProbeResult result)
     {
-        return JsonSerializer.Serialize(result, Options);
+        return JsonSerializer.Serialize(result, JsonContext.ProbeResult);
     }
 
     public static string FormatSession(ProbeSession session)
     {
-        var report = new
-        {
-            sessionId = session.Id,
-            startTime = session.StartTime,
-            endTime = session.EndTime,
-            duration = session.Duration,
-            topology = session.Topology != null ? new
-            {
-                clusterName = session.Topology.ClusterName,
-                totalHosts = session.Topology.TotalHosts,
-                upHosts = session.Topology.UpHosts,
-                downHosts = session.Topology.DownHosts,
-                datacenters = session.Topology.DatacenterHosts.Keys.ToList()
-            } : null,
-            summary = new
-            {
-                totalProbes = session.Results.Count,
-                successful = session.Results.Count(r => r.Success),
-                failed = session.Results.Count(r => !r.Success),
-                averageDurationMs = session.Results.Any() 
+        var report = new SessionReport(
+            SessionId: session.Id,
+            StartTime: session.StartTime,
+            EndTime: session.EndTime,
+            Duration: session.Duration,
+            Topology: session.Topology != null ? new TopologyReport(
+                ClusterName: session.Topology.ClusterName,
+                TotalHosts: session.Topology.TotalHosts,
+                UpHosts: session.Topology.UpHosts,
+                DownHosts: session.Topology.DownHosts,
+                Datacenters: session.Topology.DatacenterHosts.Keys.ToList()
+            ) : null,
+            Summary: new SummaryReport(
+                TotalProbes: session.Results.Count,
+                Successful: session.Results.Count(r => r.Success),
+                Failed: session.Results.Count(r => !r.Success),
+                AverageDurationMs: session.Results.Any() 
                     ? session.Results.Average(r => r.Duration.TotalMilliseconds) 
                     : 0
-            },
-            results = session.Results.OrderBy(r => r.Host.Address.ToString()).ThenBy(r => r.ProbeType).Select(r => new
-            {
-                timestamp = r.Timestamp,
-                host = r.Host.Address.ToString(),
-                port = r.Host.NativePort,
-                datacenter = r.Host.Datacenter,
-                rack = r.Host.Rack,
-                probeType = r.ProbeType.ToString(),
-                success = r.Success,
-                durationMs = r.Duration.TotalMilliseconds,
-                errorMessage = r.ErrorMessage,
-                metadata = r.Metadata
-            })
-        };
+            ),
+            Results: session.Results.OrderBy(r => r.Host.Address.ToString()).ThenBy(r => r.ProbeType).Select(r => new ResultReport(
+                Timestamp: r.Timestamp,
+                Host: r.Host.Address.ToString(),
+                Port: r.Host.NativePort,
+                Datacenter: r.Host.Datacenter,
+                Rack: r.Host.Rack,
+                ProbeType: r.ProbeType.ToString(),
+                Success: r.Success,
+                DurationMs: r.Duration.TotalMilliseconds,
+                ErrorMessage: r.ErrorMessage,
+                Metadata: r.Metadata
+            )).ToList()
+        );
 
-        return JsonSerializer.Serialize(report, Options);
+        return JsonSerializer.Serialize(report, JsonContext.SessionReport);
     }
 
     public static string FormatConnectionEvents(IEnumerable<ReconnectionEvent> events)
     {
-        var eventData = events.Select(e => new
-        {
-            timestamp = e.Timestamp,
-            host = e.Host.ToString(),
-            eventType = e.EventType.ToString(),
-            message = e.Message,
-            durationMs = e.Duration?.TotalMilliseconds
-        });
+        var eventData = events.Select(e => new EventReport(
+            Timestamp: e.Timestamp,
+            Host: e.Host.ToString(),
+            EventType: e.EventType.ToString(),
+            Message: e.Message,
+            DurationMs: e.Duration?.TotalMilliseconds
+        )).ToList();
 
-        return JsonSerializer.Serialize(eventData, Options);
+        return JsonSerializer.Serialize(eventData, JsonContext.ListEventReport);
     }
 }
