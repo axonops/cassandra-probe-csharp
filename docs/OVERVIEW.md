@@ -99,7 +99,7 @@ docker run -d --name cassandra-test -p 9042:9042 cassandra:4.1
 docker logs cassandra-test | grep "Created default superuser"
 
 # Run probe
-./cassandra-probe -cp localhost:9042
+./cassandra-probe --contact-points localhost:9042
 ```
 
 ### Download and Run
@@ -110,20 +110,20 @@ The probe ships as a self-contained executable for all major platforms:
 ```bash
 curl -LO [release-url]/cassandra-probe-macos
 chmod +x cassandra-probe-macos
-./cassandra-probe-macos -cp your-cassandra-host:9042
+./cassandra-probe-macos --contact-points your-cassandra-host:9042
 ```
 
 **Windows:**
 ```powershell
 Invoke-WebRequest -Uri [release-url]/cassandra-probe-windows.exe -OutFile cassandra-probe.exe
-.\cassandra-probe.exe -cp your-cassandra-host:9042
+.\cassandra-probe.exe --contact-points your-cassandra-host:9042
 ```
 
 **Linux:**
 ```bash
 wget [release-url]/cassandra-probe-linux
 chmod +x cassandra-probe-linux
-./cassandra-probe-linux -cp your-cassandra-host:9042
+./cassandra-probe-linux --contact-points your-cassandra-host:9042
 ```
 
 For detailed testing scenarios and Docker Compose configurations, see [LOCAL-TESTING.md](LOCAL-TESTING.md).

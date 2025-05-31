@@ -241,7 +241,7 @@ After building, test the executable:
 ./cassandra-probe --help
 
 # Test with local Cassandra
-./cassandra-probe -cp localhost:9042
+./cassandra-probe --contact-points localhost:9042
 
 # Run all unit tests
 dotnet test

@@ -199,7 +199,7 @@ The probe is designed to adapt to future Cassandra versions:
 
 Enable verbose logging to see version detection:
 ```bash
-cassandra-probe --log-level Debug -cp node1.example.com
+cassandra-probe --log-level Debug --contact-points node1.example.com
 ```
 
 ## References

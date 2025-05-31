@@ -11,13 +11,13 @@ docker run -d --name cassandra -p 9042:9042 cassandra:4.1
 # OR using Podman:
 podman run -d --name cassandra -p 9042:9042 cassandra:4.1
 
-./cassandra-probe -cp localhost:9042
+./cassandra-probe --contact-points localhost:9042
 
 # Test with authentication
-./cassandra-probe -cp localhost:9042 -u cassandra -p cassandra
+./cassandra-probe --contact-points localhost:9042 -u cassandra -p cassandra
 
 # Run all probes
-./cassandra-probe -cp localhost:9042 --all-probes
+./cassandra-probe --contact-points localhost:9042 --all-probes
 ```
 
 ## 📋 Requirements
@@ -161,40 +161,40 @@ dotnet publish src/CassandraProbe.Cli -c Release -r [RID] --self-contained false
 ### Basic Connectivity Test
 ```bash
 # No authentication required
-./cassandra-probe -cp cassandra-host:9042
+./cassandra-probe --contact-points cassandra-host:9042
 
 # With authentication
-./cassandra-probe -cp cassandra-host:9042 -u username -p password
+./cassandra-probe --contact-points cassandra-host:9042 -u username -p password
 ```
 
 ### Run Test Queries
 ```bash
 # Simple query
-./cassandra-probe -cp localhost:9042 -cql "SELECT * FROM system.local"
+./cassandra-probe --contact-points localhost:9042 --test-cql "SELECT * FROM system.local"
 
 # Query with tracing
-./cassandra-probe -cp localhost:9042 -cql "SELECT * FROM system.peers" -tr
+./cassandra-probe --contact-points localhost:9042 --test-cql "SELECT * FROM system.peers" --tracing
 ```
 
 ### Continuous Monitoring
 ```bash
 # Probe every 30 seconds
-./cassandra-probe -cp localhost:9042 -i 30
+./cassandra-probe --contact-points localhost:9042 -i 30
 
 # Run for 10 minutes
-./cassandra-probe -cp localhost:9042 -i 60 -d 10
+./cassandra-probe --contact-points localhost:9042 -i 60 -d 10
 ```
 
 ### Multi-Node Discovery
 ```bash
 # Connect to any node - discovers all
-./cassandra-probe -cp node1:9042,node2:9042,node3:9042 --all-probes
+./cassandra-probe --contact-points node1:9042,node2:9042,node3:9042 --all-probes
 ```
 
 ### Test Driver Reconnection
 ```bash
 # Start continuous monitoring to test reconnection
-./cassandra-probe -cp cluster:9042 -i 5 --connection-events
+./cassandra-probe --contact-points cluster:9042 -i 5 --connection-events
 
 # In another terminal, stop a Cassandra node
 # Watch the probe logs show reconnection attempts and success

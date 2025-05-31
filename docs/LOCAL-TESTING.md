@@ -72,17 +72,17 @@ This is the simplest case - no authentication or SSL required.
 
 **macOS:**
 ```bash
-./cassandra-probe -cp localhost:9042
+./cassandra-probe --contact-points localhost:9042
 ```
 
 **Windows:**
 ```cmd
-cassandra-probe.exe -cp localhost:9042
+cassandra-probe.exe --contact-points localhost:9042
 ```
 
 **Linux:**
 ```bash
-./cassandra-probe -cp localhost:9042
+./cassandra-probe --contact-points localhost:9042
 ```
 
 ### Scenario 2: Cluster With Authentication
@@ -91,17 +91,17 @@ Default Cassandra credentials (username: cassandra, password: cassandra).
 
 **macOS:**
 ```bash
-./cassandra-probe -cp localhost:9043 -u cassandra -p cassandra
+./cassandra-probe --contact-points localhost:9043 -u cassandra -p cassandra
 ```
 
 **Windows:**
 ```cmd
-cassandra-probe.exe -cp localhost:9043 -u cassandra -p cassandra
+cassandra-probe.exe --contact-points localhost:9043 -u cassandra -p cassandra
 ```
 
 **Linux:**
 ```bash
-./cassandra-probe -cp localhost:9043 -u cassandra -p cassandra
+./cassandra-probe --contact-points localhost:9043 -u cassandra -p cassandra
 ```
 
 ### Scenario 3: Multi-Node Cluster Discovery
@@ -111,19 +111,19 @@ Test cluster discovery across multiple nodes.
 **macOS:**
 ```bash
 # Connect to any node - will discover all
-./cassandra-probe -cp localhost:9044 --all-probes
+./cassandra-probe --contact-points localhost:9044 --all-probes
 ```
 
 **Windows:**
 ```cmd
 REM Connect to any node - will discover all
-cassandra-probe.exe -cp localhost:9044 --all-probes
+cassandra-probe.exe --contact-points localhost:9044 --all-probes
 ```
 
 **Linux:**
 ```bash
 # Connect to any node - will discover all
-./cassandra-probe -cp localhost:9044 --all-probes
+./cassandra-probe --contact-points localhost:9044 --all-probes
 ```
 
 ### Scenario 4: Test CQL Queries
@@ -133,15 +133,15 @@ Execute test queries against the cluster.
 **All Platforms:**
 ```bash
 # Simple query without auth
-./cassandra-probe -cp localhost:9042 -cql "SELECT * FROM system.local"
+./cassandra-probe --contact-points localhost:9042 --test-cql "SELECT * FROM system.local"
 
 # Query with auth
-./cassandra-probe -cp localhost:9043 -u cassandra -p cassandra \
-  -cql "SELECT * FROM system.peers" -tr
+./cassandra-probe --contact-points localhost:9043 -u cassandra -p cassandra \
+  --test-cql "SELECT * FROM system.peers" --tracing
 
 # Query with consistency level
-./cassandra-probe -cp localhost:9044 \
-  -cql "SELECT * FROM system_schema.keyspaces" -con LOCAL_ONE
+./cassandra-probe --contact-points localhost:9044 \
+  --test-cql "SELECT * FROM system_schema.keyspaces" --consistency LOCAL_ONE
 ```
 
 ### Scenario 5: Continuous Monitoring
@@ -151,19 +151,19 @@ Run probes continuously with scheduling.
 **macOS/Linux:**
 ```bash
 # Probe every 30 seconds
-./cassandra-probe -cp localhost:9042 -i 30
+./cassandra-probe --contact-points localhost:9042 -i 30
 
 # Probe every minute for 10 minutes
-./cassandra-probe -cp localhost:9042 -i 60 -d 10
+./cassandra-probe --contact-points localhost:9042 -i 60 -d 10
 ```
 
 **Windows:**
 ```cmd
 REM Probe every 30 seconds
-cassandra-probe.exe -cp localhost:9042 -i 30
+cassandra-probe.exe --contact-points localhost:9042 -i 30
 
 REM Probe every minute for 10 minutes
-cassandra-probe.exe -cp localhost:9042 -i 60 -d 10
+cassandra-probe.exe --contact-points localhost:9042 -i 60 -d 10
 ```
 
 ### Scenario 6: Comprehensive Probe
@@ -174,21 +174,21 @@ Test all probe types with detailed logging.
 ```bash
 # Full probe suite
 ./cassandra-probe \
-  -cp localhost:9042,localhost:9044,localhost:9045 \
+  --contact-points localhost:9042,localhost:9044,localhost:9045 \
   --all-probes \
-  -cql "SELECT count(*) FROM system.local" \
-  -ld ./logs \
+  --test-cql "SELECT count(*) FROM system.local" \
+  --log-dir ./logs \
   --verbose
 
 # With authentication
 ./cassandra-probe \
-  -cp localhost:9043 \
+  --contact-points localhost:9043 \
   -u cassandra -p cassandra \
   --all-probes \
-  -cql "SELECT * FROM system_auth.roles" \
-  -tr \
+  --test-cql "SELECT * FROM system_auth.roles" \
+  --tracing \
   -o json \
-  -of probe-results.json
+  --output-file probe-results.json
 ```
 
 ## Platform-Specific Execution
@@ -269,21 +269,21 @@ docker-compose -f samples/docker-compose-multiversion.yml up -d
 podman-compose -f samples/docker-compose-multiversion.yml up -d
 
 # Test Cassandra 4.0
-./cassandra-probe -cp localhost:9040
+./cassandra-probe --contact-points localhost:9040
 
 # Test Cassandra 4.1 (Recommended)
-./cassandra-probe -cp localhost:9041
+./cassandra-probe --contact-points localhost:9041
 
 # Test Cassandra 5.0
-./cassandra-probe -cp localhost:9050
+./cassandra-probe --contact-points localhost:9050
 
 # Test with authentication (4.1)
-./cassandra-probe -cp localhost:9142 -u cassandra -p cassandra
+./cassandra-probe --contact-points localhost:9142 -u cassandra -p cassandra
 
 # Compare versions
-./cassandra-probe -cp localhost:9040 -cql "SELECT release_version FROM system.local"
-./cassandra-probe -cp localhost:9041 -cql "SELECT release_version FROM system.local"
-./cassandra-probe -cp localhost:9050 -cql "SELECT release_version FROM system.local"
+./cassandra-probe --contact-points localhost:9040 --test-cql "SELECT release_version FROM system.local"
+./cassandra-probe --contact-points localhost:9041 --test-cql "SELECT release_version FROM system.local"
+./cassandra-probe --contact-points localhost:9050 --test-cql "SELECT release_version FROM system.local"
 ```
 
 ## Container Usage
@@ -298,19 +298,19 @@ podman build -t cassandra-probe .
 
 # Run probe from container (Docker)
 docker run --network cassandra-probe-network \
-  cassandra-probe -cp cassandra-no-auth:9042
+  cassandra-probe --contact-points cassandra-no-auth:9042
 # OR using Podman
 podman run --network cassandra-probe-network \
-  cassandra-probe -cp cassandra-no-auth:9042
+  cassandra-probe --contact-points cassandra-no-auth:9042
 
 # With volume for logs (Docker)
 docker run --network cassandra-probe-network \
   -v $(pwd)/logs:/app/logs \
-  cassandra-probe -cp cassandra-no-auth:9042 -ld /app/logs
+  cassandra-probe --contact-points cassandra-no-auth:9042 --log-dir /app/logs
 # OR using Podman
 podman run --network cassandra-probe-network \
   -v $(pwd)/logs:/app/logs \
-  cassandra-probe -cp cassandra-no-auth:9042 -ld /app/logs
+  cassandra-probe --contact-points cassandra-no-auth:9042 --log-dir /app/logs
 ```
 
 ## Troubleshooting
@@ -390,8 +390,8 @@ VALUES (uuid(), toTimestamp(now()), 'test1');
 Then test with probe:
 
 ```bash
-./cassandra-probe -cp localhost:9042 \
-  -cql "SELECT * FROM test_probe.probe_test"
+./cassandra-probe --contact-points localhost:9042 \
+  --test-cql "SELECT * FROM test_probe.probe_test"
 ```
 
 ## Clean Up
@@ -452,8 +452,8 @@ cassandra-probe.exe
 
 ```bash
 # Benchmark connection times
-./cassandra-probe -cp localhost:9042 --metrics -o csv -of metrics.csv
+./cassandra-probe --contact-points localhost:9042 --metrics -o csv --output-file metrics.csv
 
 # Stress test with rapid probing
-./cassandra-probe -cp localhost:9042 -i 1 --max-runs 100
+./cassandra-probe --contact-points localhost:9042 -i 1 --max-runs 100
 ```
