@@ -1,0 +1,93 @@
+# Docker Compose for testing multiple Cassandra versions
+# Tests compatibility with Cassandra 4.0, 4.1, and 5.0
+
+version: '3.8'
+
+services:
+  # Cassandra 4.0 - No Auth
+  cassandra-40:
+    image: cassandra:4.0
+    container_name: cassandra-40
+    ports:
+      - "9040:9042"
+      - "7040:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster40
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+    volumes:
+      - cassandra-40-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Cassandra 4.1 - No Auth (Recommended)
+  cassandra-41:
+    image: cassandra:4.1
+    container_name: cassandra-41
+    ports:
+      - "9041:9042"
+      - "7041:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster41
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+    volumes:
+      - cassandra-41-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Cassandra 5.0 - No Auth (Latest)
+  cassandra-50:
+    image: cassandra:5.0
+    container_name: cassandra-50
+    ports:
+      - "9050:9042"
+      - "7050:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster50
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+    volumes:
+      - cassandra-50-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Cassandra 4.1 - With Authentication
+  cassandra-41-auth:
+    image: cassandra:4.1
+    container_name: cassandra-41-auth
+    ports:
+      - "9142:9042"
+      - "7142:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster41Auth
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+      - CASSANDRA_AUTHENTICATOR=PasswordAuthenticator
+      - CASSANDRA_AUTHORIZER=CassandraAuthorizer
+    volumes:
+      - cassandra-41-auth-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -u cassandra -p cassandra -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  cassandra-40-data:
+  cassandra-41-data:
+  cassandra-50-data:
+  cassandra-41-auth-data:
+
+networks:
+  default:
+    name: cassandra-probe-test-network

@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(mkdir:*)",
+      "Bash(grep:*)",
+      "Bash(dotnet new:*)",
+      "Bash(brew install:*)",
+      "Bash(ls:*)",
+      "Bash(chmod:*)",
+      "Bash(dotnet --version)",
+      "Bash(dotnet restore)",
+      "Bash(dotnet build)",
+      "Bash(dotnet build:*)",
+      "Bash(dotnet test:*)",
+      "Bash(find:*)",
+      "Bash(dotnet --list-runtimes)",
+      "Bash(sed:*)",
+      "Bash(docker run:*)",
+      "Bash(./quickstart.sh:*)",
+      "Bash(podman ps:*)",
+      "Bash(rm:*)",
+      "Bash(dotnet script:*)",
+      "Bash(cat:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(dotnet run)",
+      "Bash(dotnet run:*)"
+    ],
+    "deny": []
+  }
+}

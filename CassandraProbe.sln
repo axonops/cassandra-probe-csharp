@@ -1,0 +1,119 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A6A5B5A8-7F3C-4D9E-8F1C-123456789012}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Core", "src\CassandraProbe.Core\CassandraProbe.Core.csproj", "{B1B2B3B4-1234-5678-9ABC-DEF012345678}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Actions", "src\CassandraProbe.Actions\CassandraProbe.Actions.csproj", "{C1C2C3C4-1234-5678-9ABC-DEF012345679}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Services", "src\CassandraProbe.Services\CassandraProbe.Services.csproj", "{D1D2D3D4-1234-5678-9ABC-DEF012345680}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Scheduling", "src\CassandraProbe.Scheduling\CassandraProbe.Scheduling.csproj", "{E1E2E3E4-1234-5678-9ABC-DEF012345681}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Logging", "src\CassandraProbe.Logging\CassandraProbe.Logging.csproj", "{F1F2F3F4-1234-5678-9ABC-DEF012345682}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Cli", "src\CassandraProbe.Cli\CassandraProbe.Cli.csproj", "{A1A2A3A4-1234-5678-9ABC-DEF012345683}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{B6B5B5A8-7F3C-4D9E-8F1C-123456789013}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Core.Tests", "tests\CassandraProbe.Core.Tests\CassandraProbe.Core.Tests.csproj", "{C6C5C5C8-1234-5678-9ABC-DEF012345684}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Actions.Tests", "tests\CassandraProbe.Actions.Tests\CassandraProbe.Actions.Tests.csproj", "{D6D5D5D8-1234-5678-9ABC-DEF012345685}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Services.Tests", "tests\CassandraProbe.Services.Tests\CassandraProbe.Services.Tests.csproj", "{E6E5E5E8-1234-5678-9ABC-DEF012345686}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Scheduling.Tests", "tests\CassandraProbe.Scheduling.Tests\CassandraProbe.Scheduling.Tests.csproj", "{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Cli.Tests", "tests\CassandraProbe.Cli.Tests\CassandraProbe.Cli.Tests.csproj", "{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.Logging.Tests", "tests\CassandraProbe.Logging.Tests\CassandraProbe.Logging.Tests.csproj", "{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.TestHelpers", "tests\CassandraProbe.TestHelpers\CassandraProbe.TestHelpers.csproj", "{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CassandraProbe.IntegrationTests", "tests\CassandraProbe.IntegrationTests\CassandraProbe.IntegrationTests.csproj", "{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{B1B2B3B4-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B1B2B3B4-1234-5678-9ABC-DEF012345678}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B1B2B3B4-1234-5678-9ABC-DEF012345678}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B1B2B3B4-1234-5678-9ABC-DEF012345678}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C1C2C3C4-1234-5678-9ABC-DEF012345679}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C1C2C3C4-1234-5678-9ABC-DEF012345679}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C1C2C3C4-1234-5678-9ABC-DEF012345679}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C1C2C3C4-1234-5678-9ABC-DEF012345679}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D1D2D3D4-1234-5678-9ABC-DEF012345680}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D1D2D3D4-1234-5678-9ABC-DEF012345680}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D1D2D3D4-1234-5678-9ABC-DEF012345680}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D1D2D3D4-1234-5678-9ABC-DEF012345680}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1E2E3E4-1234-5678-9ABC-DEF012345681}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1E2E3E4-1234-5678-9ABC-DEF012345681}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1E2E3E4-1234-5678-9ABC-DEF012345681}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1E2E3E4-1234-5678-9ABC-DEF012345681}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1F2F3F4-1234-5678-9ABC-DEF012345682}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1F2F3F4-1234-5678-9ABC-DEF012345682}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1F2F3F4-1234-5678-9ABC-DEF012345682}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1F2F3F4-1234-5678-9ABC-DEF012345682}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A1A2A3A4-1234-5678-9ABC-DEF012345683}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A1A2A3A4-1234-5678-9ABC-DEF012345683}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A1A2A3A4-1234-5678-9ABC-DEF012345683}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A1A2A3A4-1234-5678-9ABC-DEF012345683}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C6C5C5C8-1234-5678-9ABC-DEF012345684}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C6C5C5C8-1234-5678-9ABC-DEF012345684}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C6C5C5C8-1234-5678-9ABC-DEF012345684}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C6C5C5C8-1234-5678-9ABC-DEF012345684}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D6D5D5D8-1234-5678-9ABC-DEF012345685}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D6D5D5D8-1234-5678-9ABC-DEF012345685}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D6D5D5D8-1234-5678-9ABC-DEF012345685}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D6D5D5D8-1234-5678-9ABC-DEF012345685}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E6E5E5E8-1234-5678-9ABC-DEF012345686}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E6E5E5E8-1234-5678-9ABC-DEF012345686}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E6E5E5E8-1234-5678-9ABC-DEF012345686}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E6E5E5E8-1234-5678-9ABC-DEF012345686}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{B1B2B3B4-1234-5678-9ABC-DEF012345678} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{C1C2C3C4-1234-5678-9ABC-DEF012345679} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{D1D2D3D4-1234-5678-9ABC-DEF012345680} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{E1E2E3E4-1234-5678-9ABC-DEF012345681} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{F1F2F3F4-1234-5678-9ABC-DEF012345682} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{A1A2A3A4-1234-5678-9ABC-DEF012345683} = {A6A5B5A8-7F3C-4D9E-8F1C-123456789012}
+		{C6C5C5C8-1234-5678-9ABC-DEF012345684} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{D6D5D5D8-1234-5678-9ABC-DEF012345685} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{E6E5E5E8-1234-5678-9ABC-DEF012345686} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{CCCCCCCC-CCCC-CCCC-CCCC-CCCCCCCCCCCC} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{DDDDDDDD-DDDD-DDDD-DDDD-DDDDDDDDDDDD} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+		{EEEEEEEE-EEEE-EEEE-EEEE-EEEEEEEEEEEE} = {B6B5B5A8-7F3C-4D9E-8F1C-123456789013}
+	EndGlobalSection
+EndGlobal

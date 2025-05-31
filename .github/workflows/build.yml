@@ -1,0 +1,62 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --no-restore
+      
+    - name: Test
+      run: dotnet test --no-build --verbosity normal
+      
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Publish Windows
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/windows
+      
+    - name: Publish Linux
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/linux
+      
+    - name: Publish macOS (Intel)
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/osx-x64
+      
+    - name: Publish macOS (ARM64)
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ./artifacts/osx-arm64
+      
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: cassandra-probe-binaries
+        path: ./artifacts/
