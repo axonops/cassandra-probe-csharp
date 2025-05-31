@@ -72,27 +72,51 @@ jobs:
         dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o .
         # Generate XML SBOM
         dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o .
-        # Find the generated files
-        echo "Finding generated SBOM files:"
-        find . -name "*.json" -o -name "*.xml" | grep -E "(bom|sbom)" || true
-        # Check if directories were created
-        if [ -d "json" ]; then
-          echo "JSON directory exists, moving bom.json"
-          mv json/bom.json ./sbom.json || true
+        
+        # Debug: Show what was created
+        echo "=== Current directory structure ==="
+        ls -la
+        
+        # Move files from format directories
+        if [ -d "json" ] && [ -f "json/bom.json" ]; then
+          echo "Moving json/bom.json to sbom.json"
+          mv json/bom.json ./sbom.json
         fi
-        if [ -d "xml" ]; then
-          echo "XML directory exists, moving bom.xml"
-          mv xml/bom.xml ./sbom.xml || true
+        
+        if [ -d "xml" ] && [ -f "xml/bom.xml" ]; then
+          echo "Moving xml/bom.xml to sbom.xml"
+          mv xml/bom.xml ./sbom.xml
         fi
-        ls -la *.json *.xml || true
+        
+        # Verify files exist
+        echo "=== Checking for SBOM files ==="
+        if [ -f "sbom.json" ]; then
+          echo "✓ sbom.json exists"
+        else
+          echo "✗ sbom.json NOT found"
+        fi
+        
+        if [ -f "sbom.xml" ]; then
+          echo "✓ sbom.xml exists"
+        else
+          echo "✗ sbom.xml NOT found"
+        fi
+        
+        # Final directory listing
+        echo "=== Final directory listing ==="
+        ls -la sbom.* || echo "No sbom.* files found"
     
     - name: Upload SBOM
       uses: actions/upload-artifact@v4
+      if: always()
       with:
         name: sbom-latest
         path: |
+          json/bom.json
+          xml/bom.xml
           sbom.json
           sbom.xml
+        if-no-files-found: warn
       
   publish:
     needs: build
