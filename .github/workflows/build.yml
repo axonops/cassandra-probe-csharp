@@ -68,16 +68,31 @@ jobs:
     
     - name: Generate SBOM
       run: |
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
-        echo "Generated files:"
-        ls -la bom.*
+        # Generate JSON SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o .
+        # Generate XML SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o .
+        # Find the generated files
+        echo "Finding generated SBOM files:"
+        find . -name "*.json" -o -name "*.xml" | grep -E "(bom|sbom)" || true
+        # Check if directories were created
+        if [ -d "json" ]; then
+          echo "JSON directory exists, moving bom.json"
+          mv json/bom.json ./sbom.json || true
+        fi
+        if [ -d "xml" ]; then
+          echo "XML directory exists, moving bom.xml"
+          mv xml/bom.xml ./sbom.xml || true
+        fi
+        ls -la *.json *.xml || true
     
     - name: Upload SBOM
       uses: actions/upload-artifact@v4
       with:
         name: sbom-latest
-        path: bom.*
+        path: |
+          sbom.json
+          sbom.xml
       
   publish:
     needs: build

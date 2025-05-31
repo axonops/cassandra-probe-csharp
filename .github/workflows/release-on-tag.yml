@@ -99,12 +99,25 @@ jobs:
     
     - name: Generate SBOM
       run: |
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
-        echo "Generated files:"
-        ls -la bom.*
-        mv bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
-        mv bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+        # Generate JSON SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o .
+        # Generate XML SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o .
+        # The tool creates directories named 'json' and 'xml' with bom files inside
+        if [ -d "json" ] && [ -f "json/bom.json" ]; then
+          mv json/bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
+        else
+          echo "ERROR: JSON SBOM not found!"
+          exit 1
+        fi
+        if [ -d "xml" ] && [ -f "xml/bom.xml" ]; then
+          mv xml/bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+        else
+          echo "ERROR: XML SBOM not found!"
+          exit 1
+        fi
+        echo "Generated SBOM files:"
+        ls -la cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.*
     
     - name: Upload SBOM artifacts
       uses: actions/upload-artifact@v4
