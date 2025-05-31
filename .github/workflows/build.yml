@@ -68,52 +68,51 @@ jobs:
     
     - name: Generate SBOM
       run: |
+        # Create output directory
+        mkdir -p sbom-output
+        
         # Generate JSON SBOM
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o .
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o sbom-output
+        
         # Generate XML SBOM
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o .
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o sbom-output
         
         # Debug: Show what was created
-        echo "=== Current directory structure ==="
-        ls -la
+        echo "=== SBOM output directory ==="
+        ls -la sbom-output/
         
-        # Move files from format directories
-        if [ -d "json" ] && [ -f "json/bom.json" ]; then
-          echo "Moving json/bom.json to sbom.json"
-          mv json/bom.json ./sbom.json
+        # Check what files exist
+        echo "=== Finding all json and xml files ==="
+        find . -type f \( -name "*.json" -o -name "*.xml" \) -ls
+        
+        # Copy files with standard names
+        if [ -f "sbom-output/bom.json" ]; then
+          cp sbom-output/bom.json ./sbom.json
+          echo "✓ Copied bom.json to sbom.json"
+        elif [ -f "json" ]; then
+          # If 'json' is a file, rename it
+          mv json sbom.json
+          echo "✓ Renamed json file to sbom.json"
         fi
         
-        if [ -d "xml" ] && [ -f "xml/bom.xml" ]; then
-          echo "Moving xml/bom.xml to sbom.xml"
-          mv xml/bom.xml ./sbom.xml
+        if [ -f "sbom-output/bom.xml" ]; then
+          cp sbom-output/bom.xml ./sbom.xml
+          echo "✓ Copied bom.xml to sbom.xml"
+        elif [ -f "xml" ]; then
+          # If 'xml' is a file, rename it
+          mv xml sbom.xml
+          echo "✓ Renamed xml file to sbom.xml"
         fi
         
-        # Verify files exist
-        echo "=== Checking for SBOM files ==="
-        if [ -f "sbom.json" ]; then
-          echo "✓ sbom.json exists"
-        else
-          echo "✗ sbom.json NOT found"
-        fi
-        
-        if [ -f "sbom.xml" ]; then
-          echo "✓ sbom.xml exists"
-        else
-          echo "✗ sbom.xml NOT found"
-        fi
-        
-        # Final directory listing
-        echo "=== Final directory listing ==="
-        ls -la sbom.* || echo "No sbom.* files found"
+        # Final check
+        echo "=== Final SBOM files ==="
+        ls -la sbom.*
     
     - name: Upload SBOM
       uses: actions/upload-artifact@v4
-      if: always()
       with:
         name: sbom-latest
         path: |
-          json/bom.json
-          xml/bom.xml
           sbom.json
           sbom.xml
         if-no-files-found: warn
