@@ -20,7 +20,7 @@ public class CsvFormatterTests
 
         // Assert
         csv.Should().NotBeNullOrWhiteSpace();
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         lines.Should().HaveCountGreaterThan(1);
         
         var headers = lines[0];
@@ -43,7 +43,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         lines.Should().HaveCount(3); // Header + 2 results
@@ -61,7 +61,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         var dataLine = lines[1].Split(',');
 
         // Assert
@@ -85,7 +85,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         var dataLine = lines[1].Split(',');
 
         // Assert
@@ -107,7 +107,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         // The error message with comma should be properly handled
@@ -125,7 +125,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         lines[1].Should().Contain("\"dc\"\"1\"\"\""); // Escaped quotes
@@ -142,7 +142,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         var dataLine = lines[1].Split(',');
 
         // Assert
@@ -158,7 +158,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         lines.Should().HaveCount(1); // Only headers
@@ -182,7 +182,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         lines[1].Should().Contain("Socket"); // Earlier result first
@@ -205,7 +205,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
         var dataLine = lines[1].Split(',');
 
         // Assert
@@ -227,7 +227,7 @@ public class CsvFormatterTests
 
         // Act
         var csv = CsvFormatter.FormatSession(session);
-        var lines = csv.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
 
         // Assert
         lines.Should().HaveCount(6); // Header + 5 probe types
@@ -261,10 +261,14 @@ public class CsvFormatterTests
         var csv = CsvFormatter.FormatSession(session);
 
         // Assert
-        csv.Should().NotContain("\r\n", "within data fields");
-        csv.Should().Contain("\"dc,1");
-        csv.Should().Contain("\"rack");
-        csv.Should().Contain("\"Error:");
+        // Check that data fields don't contain line breaks (they should be replaced with spaces)
+        var lines = csv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
+        lines.Length.Should().Be(2); // Header + 1 data line
+        
+        // Verify special characters are properly escaped
+        csv.Should().Contain("\"dc,1 \"\"test\"\"\""); // Datacenter with comma and quotes (doubled quotes)
+        csv.Should().Contain("\"rack 1\""); // Rack with original line breaks replaced
+        csv.Should().Contain("\"Error: \"\"Connection, failed\"\"\""); // Error with quotes and comma (doubled quotes)
     }
 
     private ProbeSession CreateTestSession()
