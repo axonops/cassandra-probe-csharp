@@ -1,3 +1,4 @@
+using Cassandra;
 using CassandraProbe.Core.Configuration;
 using CassandraProbe.Core.Interfaces;
 using CassandraProbe.Services;
@@ -59,7 +60,7 @@ public class ReconnectionTests : IAsyncLifetime
         // Try to use the session again
         try
         {
-            await session.ExecuteAsync("SELECT key FROM system.local");
+            await session.ExecuteAsync(new SimpleStatement("SELECT key FROM system.local"));
         }
         catch
         {
@@ -74,7 +75,7 @@ public class ReconnectionTests : IAsyncLifetime
         // Assert
         downStatus.FailedHosts.Should().BeGreaterThan(0);
         history.Should().NotBeEmpty();
-        history.Should().Contain(e => e.EventType == Core.Models.ReconnectionEventType.AttemptStarted);
+        history.Should().Contain(e => e.EventType == CassandraProbe.Core.Interfaces.ReconnectionEventType.ReconnectionAttempt);
     }
 
     [Fact]
@@ -130,8 +131,7 @@ public class ReconnectionTests : IAsyncLifetime
             .WithEnvironment("MAX_HEAP_SIZE", "512M")
             .WithEnvironment("HEAP_NEWSIZE", "128M")
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilMessageIsLogged("Startup complete")
-                .WithTimeout(TimeSpan.FromMinutes(2)))
+                .UntilMessageIsLogged("Startup complete"))
             .Build();
 
         await container.StartAsync();

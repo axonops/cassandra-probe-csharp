@@ -24,8 +24,7 @@ public class CassandraContainerFixture : IAsyncLifetime
             .WithEnvironment("MAX_HEAP_SIZE", "512M")
             .WithEnvironment("HEAP_NEWSIZE", "128M")
             .WithWaitStrategy(Wait.ForUnixContainer()
-                .UntilMessageIsLogged("Startup complete")
-                .WithTimeout(TimeSpan.FromMinutes(2)))
+                .UntilMessageIsLogged("Startup complete"))
             .Build();
     }
 

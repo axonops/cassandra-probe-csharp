@@ -1,0 +1,58 @@
+name: Integration Tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tests/CassandraProbe.IntegrationTests/**'
+      - 'src/**'
+
+jobs:
+  integration-tests:
+    runs-on: ubuntu-latest
+    
+    services:
+      cassandra:
+        image: cassandra:4.1
+        ports:
+          - 9042:9042
+        options: >-
+          --health-cmd "cqlsh -e 'SELECT now() FROM system.local'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+        env:
+          MAX_HEAP_SIZE: 512M
+          HEAP_NEWSIZE: 128M
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --no-restore
+      
+    - name: Wait for Cassandra
+      run: |
+        echo "Waiting for Cassandra to be ready..."
+        for i in {1..30}; do
+          if docker exec $(docker ps -q -f ancestor=cassandra:4.1) cqlsh -e "SELECT now() FROM system.local" 2>/dev/null; then
+            echo "Cassandra is ready!"
+            break
+          fi
+          echo "Waiting... ($i/30)"
+          sleep 5
+        done
+      
+    - name: Run Integration Tests
+      run: dotnet test tests/CassandraProbe.IntegrationTests --no-build --verbosity normal
+      env:
+        CASSANDRA_CONTACT_POINT: localhost
+        CASSANDRA_PORT: 9042
