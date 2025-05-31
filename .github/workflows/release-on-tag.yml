@@ -99,11 +99,12 @@ jobs:
     
     - name: Generate SBOM
       run: |
-        mkdir -p sbom-output
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom-output -f json -sv 1.4 -j
-        mv ./sbom-output/bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
-        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o ./sbom-output -f xml -sv 1.4 -j
-        mv ./sbom-output/bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f json
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -o . -f xml
+        echo "Generated files:"
+        ls -la bom.*
+        mv bom.json cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.json
+        mv bom.xml cassandra-probe-${{ steps.tag.outputs.TAG_NAME }}-sbom.xml
     
     - name: Upload SBOM artifacts
       uses: actions/upload-artifact@v4
