@@ -1,4 +1,4 @@
-# Cassandra Probe
+# Cassandra C# Probe
 
 A diagnostic and monitoring tool for Apache Cassandra® clusters, designed to test C# driver reconnection behavior and cluster resilience.
 
