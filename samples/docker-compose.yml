@@ -1,0 +1,122 @@
+# Docker Compose for local Cassandra 4.1 testing
+# This configuration provides different Cassandra setups for testing
+
+version: '3.8'
+
+services:
+  # Single node Cassandra without authentication
+  cassandra-no-auth:
+    image: cassandra:4.1
+    container_name: cassandra-no-auth
+    ports:
+      - "9042:9042"
+      - "7000:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestClusterNoAuth
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+    volumes:
+      - cassandra-no-auth-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Single node Cassandra with authentication
+  cassandra-with-auth:
+    image: cassandra:4.1
+    container_name: cassandra-with-auth
+    ports:
+      - "9043:9042"
+      - "7001:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestClusterAuth
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+      - CASSANDRA_AUTHENTICATOR=PasswordAuthenticator
+      - CASSANDRA_AUTHORIZER=CassandraAuthorizer
+    volumes:
+      - cassandra-auth-data:/var/lib/cassandra
+      - ./cassandra-auth.yaml:/etc/cassandra/cassandra.yaml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -u cassandra -p cassandra -e 'DESC KEYSPACES;'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Three-node cluster without authentication
+  cassandra-node1:
+    image: cassandra:4.1
+    container_name: cassandra-node1
+    ports:
+      - "9044:9042"
+      - "7002:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestClusterMulti
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-node1
+    volumes:
+      - cassandra-node1-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  cassandra-node2:
+    image: cassandra:4.1
+    container_name: cassandra-node2
+    ports:
+      - "9045:9042"
+      - "7003:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestClusterMulti
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_RACK=rack2
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-node1
+    volumes:
+      - cassandra-node2-data:/var/lib/cassandra
+    depends_on:
+      - cassandra-node1
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  cassandra-node3:
+    image: cassandra:4.1
+    container_name: cassandra-node3
+    ports:
+      - "9046:9042"
+      - "7004:7000"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestClusterMulti
+      - CASSANDRA_DC=dc2
+      - CASSANDRA_RACK=rack1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-node1
+    volumes:
+      - cassandra-node3-data:/var/lib/cassandra
+    depends_on:
+      - cassandra-node1
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  cassandra-no-auth-data:
+  cassandra-auth-data:
+  cassandra-node1-data:
+  cassandra-node2-data:
+  cassandra-node3-data:
+
+networks:
+  default:
+    name: cassandra-probe-network

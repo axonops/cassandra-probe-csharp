@@ -1,0 +1,35 @@
+Cassandra Probe
+Copyright 2024 AxonOps Limited
+
+This product includes software developed at AxonOps Limited (https://axonops.com).
+
+This product is a C# port of the original cassandra-probe project 
+(https://github.com/digitalis-io/cassandra-probe) by Digitalis.IO.
+
+This product uses the following third-party libraries:
+
+- DataStax C# Driver for Apache Cassandra
+  Copyright DataStax, Inc.
+  Licensed under the Apache License 2.0
+
+- Polly
+  Copyright Michael Wolfenden, App vNext
+  Licensed under the BSD 3-Clause License
+
+- Serilog
+  Copyright Serilog Contributors
+  Licensed under the Apache License 2.0
+
+- CommandLineParser
+  Copyright Giacomo Stelluti Scala & Contributors
+  Licensed under the MIT License
+
+- Quartz.NET
+  Copyright Marko Lahma
+  Licensed under the Apache License 2.0
+
+- YamlDotNet
+  Copyright Antoine Aubry and contributors
+  Licensed under the MIT License
+
+Apache Cassandra is a trademark of the Apache Software Foundation.

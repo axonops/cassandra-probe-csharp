@@ -1,0 +1,144 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags-ignore:
+      - '*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Restore dependencies
+      run: dotnet restore
+      
+    - name: Build
+      run: dotnet build --no-restore
+      
+    - name: Test Core
+      run: dotnet test tests/CassandraProbe.Core.Tests --no-build --verbosity normal
+      
+    - name: Test Services
+      run: dotnet test tests/CassandraProbe.Services.Tests --no-build --verbosity normal
+      
+    - name: Test Actions
+      run: dotnet test tests/CassandraProbe.Actions.Tests --no-build --verbosity normal
+      
+    - name: Test Scheduling
+      run: dotnet test tests/CassandraProbe.Scheduling.Tests --no-build --verbosity normal
+      
+    - name: Test Logging
+      run: dotnet test tests/CassandraProbe.Logging.Tests --no-build --verbosity normal
+      
+    - name: Test CLI
+      run: dotnet test tests/CassandraProbe.Cli.Tests --no-build --verbosity normal
+  
+  sbom:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+    
+    - name: Install CycloneDX
+      run: dotnet tool install --global CycloneDX
+    
+    - name: Restore dependencies
+      run: dotnet restore
+    
+    - name: Generate SBOM
+      run: |
+        # Create output directory
+        mkdir -p sbom-output
+        
+        # Generate JSON SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f json -o sbom-output
+        
+        # Generate XML SBOM
+        dotnet CycloneDX src/CassandraProbe.Cli/CassandraProbe.Cli.csproj -f xml -o sbom-output
+        
+        # Debug: Show what was created
+        echo "=== SBOM output directory ==="
+        ls -la sbom-output/
+        
+        # The tool creates files named 'json' and 'xml' without extensions
+        # Copy them with proper extensions
+        if [ -f "sbom-output/json" ]; then
+          cp sbom-output/json ./sbom.json
+          echo "✓ Copied json to sbom.json"
+        else
+          echo "ERROR: sbom-output/json not found"
+          exit 1
+        fi
+        
+        if [ -f "sbom-output/xml" ]; then
+          cp sbom-output/xml ./sbom.xml
+          echo "✓ Copied xml to sbom.xml"
+        else
+          echo "ERROR: sbom-output/xml not found"
+          exit 1
+        fi
+        
+        # Final check
+        echo "=== Final SBOM files ==="
+        ls -la sbom.*
+    
+    - name: Upload SBOM
+      uses: actions/upload-artifact@v4
+      with:
+        name: sbom-latest
+        path: |
+          sbom.json
+          sbom.xml
+        if-no-files-found: warn
+      
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+        
+    - name: Publish Windows
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/windows
+      
+    - name: Publish Linux
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r linux-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/linux
+      
+    - name: Publish macOS (Intel)
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r osx-x64 --self-contained -p:PublishSingleFile=true -o ./artifacts/osx-x64
+      
+    - name: Publish macOS (ARM64)
+      run: dotnet publish src/CassandraProbe.Cli -c Release -r osx-arm64 --self-contained -p:PublishSingleFile=true -o ./artifacts/osx-arm64
+      
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: cassandra-probe-binaries
+        path: ./artifacts/
