@@ -37,7 +37,12 @@ public class ReconnectionTests : IAsyncLifetime
     public async Task ConnectionMonitor_ShouldTrackReconnectionAfterNodeRestart()
     {
         // Arrange
-        var sessionManager = _serviceProvider!.GetRequiredService<ISessionManager>();
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider is not initialized");
+        }
+        
+        var sessionManager = _serviceProvider.GetRequiredService<ISessionManager>();
         var connectionMonitor = _serviceProvider.GetRequiredService<IConnectionMonitor>();
         
         // Establish initial connection
@@ -48,7 +53,12 @@ public class ReconnectionTests : IAsyncLifetime
         initialStatus.ActiveConnections.Should().BeGreaterThan(0);
 
         // Act - Stop container
-        await _cassandraContainer!.StopAsync();
+        if (_cassandraContainer == null)
+        {
+            throw new InvalidOperationException("Container is not initialized");
+        }
+        
+        await _cassandraContainer.StopAsync();
         await Task.Delay(TimeSpan.FromSeconds(2)); // Wait for driver to detect
 
         var downStatus = connectionMonitor.GetPoolStatus();
@@ -82,7 +92,12 @@ public class ReconnectionTests : IAsyncLifetime
     public async Task SessionManager_ShouldMaintainSameSessionAcrossReconnection()
     {
         // Arrange
-        var sessionManager = _serviceProvider!.GetRequiredService<ISessionManager>();
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider is not initialized");
+        }
+        
+        var sessionManager = _serviceProvider.GetRequiredService<ISessionManager>();
         
         // Get initial session and cluster references
         var sessionBefore = await sessionManager.GetSessionAsync();
@@ -105,7 +120,12 @@ public class ReconnectionTests : IAsyncLifetime
     public async Task ProbeExecution_ShouldContinueUsingExistingSession()
     {
         // Arrange
-        var orchestrator = _serviceProvider!.GetRequiredService<IProbeOrchestrator>();
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider is not initialized");
+        }
+        
+        var orchestrator = _serviceProvider.GetRequiredService<IProbeOrchestrator>();
         var sessionManager = _serviceProvider.GetRequiredService<ISessionManager>();
         var config = CreateProbeConfiguration();
 

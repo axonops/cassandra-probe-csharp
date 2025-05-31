@@ -112,7 +112,7 @@ public class SessionManager : ISessionManager, IDisposable
 
             if (!string.IsNullOrEmpty(_configuration.Connection.CertificatePath))
             {
-                var cert = new X509Certificate2(_configuration.Connection.CertificatePath);
+                var cert = X509CertificateLoader.LoadCertificateFromFile(_configuration.Connection.CertificatePath);
                 sslOptions.SetCertificateCollection(new X509CertificateCollection { cert });
             }
 

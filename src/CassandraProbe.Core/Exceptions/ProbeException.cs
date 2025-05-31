@@ -6,7 +6,7 @@ public class ProbeException : Exception
     {
     }
 
-    public ProbeException(string message, Exception innerException) : base(message, innerException)
+    public ProbeException(string message, Exception? innerException) : base(message, innerException)
     {
     }
 }
@@ -17,7 +17,7 @@ public class ConnectionException : ProbeException
     {
     }
 
-    public ConnectionException(string message, Exception innerException) : base(message, innerException)
+    public ConnectionException(string message, Exception? innerException) : base(message, innerException)
     {
     }
 }

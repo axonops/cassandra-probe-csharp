@@ -23,8 +23,9 @@ public class JobScheduler
 
         _logger.LogInformation("Scheduler started");
 
-        if (configuration.Scheduling.IntervalSeconds.HasValue || 
-            !string.IsNullOrEmpty(configuration.Scheduling.CronExpression))
+        if (configuration.Scheduling != null && 
+            (configuration.Scheduling.IntervalSeconds.HasValue || 
+             !string.IsNullOrEmpty(configuration.Scheduling.CronExpression)))
         {
             await ScheduleProbeJob(configuration);
         }
@@ -55,40 +56,47 @@ public class JobScheduler
         // Create trigger
         ITrigger trigger;
         
-        if (!string.IsNullOrEmpty(configuration.Scheduling.CronExpression))
+        var scheduling = configuration?.Scheduling;
+        if (scheduling == null)
+        {
+            _logger.LogWarning("No scheduling configuration found");
+            return;
+        }
+        
+        if (!string.IsNullOrEmpty(scheduling.CronExpression))
         {
             _logger.LogInformation("Scheduling probe job with cron expression: {Cron}", 
-                configuration.Scheduling.CronExpression);
+                scheduling.CronExpression);
             
             trigger = TriggerBuilder.Create()
                 .WithIdentity("ProbeTrigger", "CassandraProbe")
-                .WithCronSchedule(configuration.Scheduling.CronExpression)
+                .WithCronSchedule(scheduling.CronExpression)
                 .Build();
         }
-        else if (configuration.Scheduling.IntervalSeconds.HasValue)
+        else if (scheduling.IntervalSeconds.HasValue)
         {
             _logger.LogInformation("Scheduling probe job with interval: {Interval} seconds", 
-                configuration.Scheduling.IntervalSeconds.Value);
+                scheduling.IntervalSeconds.Value);
 
             var triggerBuilder = TriggerBuilder.Create()
                 .WithIdentity("ProbeTrigger", "CassandraProbe")
                 .StartNow()
                 .WithSimpleSchedule(x => x
-                    .WithIntervalInSeconds(configuration.Scheduling.IntervalSeconds.Value)
+                    .WithIntervalInSeconds(scheduling.IntervalSeconds.Value)
                     .RepeatForever());
 
             // Apply max runs if specified
-            if (configuration.Scheduling.MaxRuns.HasValue)
+            if (scheduling.MaxRuns.HasValue)
             {
                 triggerBuilder.WithSimpleSchedule(x => x
-                    .WithIntervalInSeconds(configuration.Scheduling.IntervalSeconds.Value)
-                    .WithRepeatCount(configuration.Scheduling.MaxRuns.Value - 1));
+                    .WithIntervalInSeconds(scheduling.IntervalSeconds.Value)
+                    .WithRepeatCount(scheduling.MaxRuns.Value - 1));
             }
 
             // Apply duration limit if specified
-            if (configuration.Scheduling.DurationMinutes.HasValue)
+            if (scheduling.DurationMinutes.HasValue)
             {
-                var endTime = DateTimeOffset.UtcNow.AddMinutes(configuration.Scheduling.DurationMinutes.Value);
+                var endTime = DateTimeOffset.UtcNow.AddMinutes(scheduling.DurationMinutes.Value);
                 triggerBuilder.EndAt(endTime);
             }
 
@@ -100,7 +108,12 @@ public class JobScheduler
             return;
         }
 
-        await _scheduler!.ScheduleJob(job, trigger);
+        if (_scheduler == null)
+        {
+            throw new InvalidOperationException("Scheduler is not initialized");
+        }
+
+        await _scheduler.ScheduleJob(job, trigger);
         
         _logger.LogInformation("Probe job scheduled successfully. First run: {FirstRun}", 
             trigger.GetNextFireTimeUtc()?.DateTime ?? DateTime.MaxValue);

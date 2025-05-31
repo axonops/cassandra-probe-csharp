@@ -65,14 +65,34 @@ public class ConnectionMonitor : IConnectionMonitor
     private void OnHostAdded(Host host)
     {
         var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
-        _hostStates[endpoint] = host.IsUp ? ConnectionState.Connected : ConnectionState.Disconnected;
+        var newState = host.IsUp ? ConnectionState.Connected : ConnectionState.Disconnected;
+        var previousState = ConnectionState.Disconnected; // New hosts start as disconnected
+        _hostStates[endpoint] = newState;
+        
+        // Raise the event
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs
+        {
+            Host = endpoint,
+            OldState = previousState,
+            NewState = newState
+        });
     }
 
     private void OnHostRemoved(Host host)
     {
         var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
-        _hostStates.TryRemove(endpoint, out _);
-        _reconnectionInfo.TryRemove(endpoint, out _);
+        if (_hostStates.TryRemove(endpoint, out var oldState))
+        {
+            _reconnectionInfo.TryRemove(endpoint, out _);
+            
+            // Raise the event
+            ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs
+            {
+                Host = endpoint,
+                OldState = oldState,
+                NewState = ConnectionState.Disconnected
+            });
+        }
     }
 
 

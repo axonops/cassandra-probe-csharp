@@ -98,7 +98,12 @@ class Program
 
     private static async Task<int> RunSingleProbeAsync(ProbeConfiguration config, ILogger<Program> logger, CommandLineOptions options)
     {
-        var orchestrator = _serviceProvider!.GetRequiredService<IProbeOrchestrator>();
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider is not initialized");
+        }
+        
+        var orchestrator = _serviceProvider.GetRequiredService<IProbeOrchestrator>();
         var connectionMonitor = _serviceProvider.GetRequiredService<IConnectionMonitor>();
 
         var session = await orchestrator.ExecuteProbesAsync(config);
@@ -119,7 +124,12 @@ class Program
 
     private static async Task<int> RunScheduledProbesAsync(ProbeConfiguration config, ILogger<Program> logger)
     {
-        var scheduler = _serviceProvider!.GetRequiredService<JobScheduler>();
+        if (_serviceProvider == null)
+        {
+            throw new InvalidOperationException("Service provider is not initialized");
+        }
+        
+        var scheduler = _serviceProvider.GetRequiredService<JobScheduler>();
         var schedulerInstance = await scheduler.StartAsync(config);
 
         logger.LogInformation("Probe scheduled. Press Ctrl+C to stop...");
@@ -209,17 +219,17 @@ class Program
             
             Authentication = new AuthenticationSettings
             {
-                Username = options.Username,
-                Password = options.Password,
-                CqlshrcPath = options.CqlshrcPath
+                Username = options.Username ?? string.Empty,
+                Password = options.Password ?? string.Empty,
+                CqlshrcPath = options.CqlshrcPath ?? string.Empty
             },
             
             Connection = new ConnectionSettings
             {
                 Port = options.Port,
                 UseSsl = options.UseSsl,
-                CertificatePath = options.CertificatePath,
-                CaCertificatePath = options.CaCertificatePath
+                CertificatePath = options.CertificatePath ?? string.Empty,
+                CaCertificatePath = options.CaCertificatePath ?? string.Empty
             },
             
             ProbeSelection = new ProbeSelectionSettings
@@ -233,7 +243,7 @@ class Program
             
             Query = new QuerySettings
             {
-                TestCql = options.TestCql,
+                TestCql = options.TestCql ?? string.Empty,
                 ConsistencyLevel = options.ConsistencyLevel,
                 EnableTracing = options.EnableTracing,
                 QueryTimeoutSeconds = options.QueryTimeout
@@ -255,7 +265,7 @@ class Program
             Scheduling = new SchedulingSettings
             {
                 IntervalSeconds = options.IntervalSeconds,
-                CronExpression = options.CronExpression,
+                CronExpression = options.CronExpression ?? string.Empty,
                 DurationMinutes = options.DurationMinutes,
                 MaxRuns = options.MaxRuns
             }
