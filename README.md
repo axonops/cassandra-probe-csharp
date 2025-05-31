@@ -1,6 +1,6 @@
 # Cassandra Probe
 
-A high-performance diagnostic and monitoring tool for Apache Cassandra® clusters, designed to test driver reconnection behavior and cluster resilience.
+A diagnostic and monitoring tool for Apache Cassandra® clusters, designed to test C# driver reconnection behavior and cluster resilience.
 
 [![Build Status](https://github.com/axonops/cassandra-probe-csharp/actions/workflows/build.yml/badge.svg)](https://github.com/axonops/cassandra-probe-csharp/actions)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
