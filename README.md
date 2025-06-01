@@ -110,29 +110,24 @@ For comprehensive documentation, see the **[Documentation Index](docs/README.md)
 - [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [**Building from Source**](docs/BUILD.md) - Build instructions for developers
 
-## ⚠️ C# Driver Limitations
+## ⚠️ Connection Recovery Observations
 
-**Important**: The DataStax C# driver has architectural differences from the Java driver that affect failure detection and recovery:
+In our testing with the DataStax C# driver, we've observed some scenarios where applications may experience connection recovery issues:
 
-- **No public HostUp/HostDown events** - The driver tracks state internally but doesn't expose state change events
-- **Limited cluster visibility** - Only HostAdded/HostRemoved events are available, not state transitions
-- **Delayed failure detection** - Failed connections discovered only when queries are executed
-- **Manual recovery often required** - Applications may need restart after cluster-wide outages
+- **Delayed recovery after node failures** - Applications sometimes continue experiencing timeouts after nodes return
+- **Rolling restart challenges** - During maintenance windows, applications may not seamlessly failover
+- **Cluster-wide outage recovery** - After full cluster outages, manual application restarts have been needed
 
-These limitations can cause your C# applications to:
-- Continue using failed connections
-- Experience timeouts instead of failover
-- Require manual intervention or restart to recover
+While the root cause of these behaviors isn't fully clear, we've developed a resilient client implementation that has helped improve recovery in our use cases.
 
-### Documentation and References
-- **[Detailed C# Driver Limitations Guide](docs/CSHARP_DRIVER_LIMITATIONS.md)** - Comprehensive guide with workarounds
-- **[Resilient Client Implementation](docs/RESILIENT_CLIENT_IMPLEMENTATION.md)** - Production-ready solution
-- [Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations) - Official driver docs
-- [Driver Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver) - C# vs Java
+### Additional Resources
+- **[Our Observations & Workarounds](docs/CSHARP_DRIVER_LIMITATIONS.md)** - What we've seen and how we handle it
+- **[Resilient Client Implementation](docs/RESILIENT_CLIENT_IMPLEMENTATION.md)** - Our approach to improving recovery
+- [Official Driver Documentation](https://docs.datastax.com/en/developer/csharp-driver/latest/)
 
 ### Try the Resilient Client Demo
 ```bash
-# See how to handle these limitations in production
+# See our approach to handling connection recovery
 ./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
