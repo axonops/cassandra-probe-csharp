@@ -4,12 +4,15 @@
 
 The DataStax C# driver for Apache Cassandra has several limitations compared to the Java driver that can significantly impact connection management and cluster state awareness. These limitations are particularly problematic during rolling restarts and cluster-wide outages.
 
-**Official Documentation References:**
-- [JIRA: Add HostUp/HostDown events (CSHARP-183)](https://datastax-oss.atlassian.net/browse/CSHARP-183) - Open since 2014
-- [C# Driver Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations)
-- [Driver Feature Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver)
-- [GitHub Issue #147](https://github.com/datastax/csharp-driver/issues/147) - Community discussion on missing events
+**References and Known Issues:**
+- [C# Driver API Documentation](https://docs.datastax.com/en/latest-csharp-driver-api/api/Cassandra.ICluster.html) - Shows only HostAdded/HostRemoved events
+- [Java Driver Host.StateListener](https://docs.datastax.com/en/drivers/java/2.1/com/datastax/driver/core/Host.StateListener.html) - Compare with Java's full event model
 - [Stack Overflow: C# Driver Connection Issues](https://stackoverflow.com/questions/tagged/datastax-csharp-driver+connection)
+
+**Historical Issues Related to Host State:**
+- CSHARP-252: "Metadata.HostEvent is not firing when a node is Down"
+- CSHARP-878: "ControlConnection attempts to connect to DOWN nodes"
+- CSHARP-802: "Session.Warmup should mark host as down if no connection can be opened"
 
 ## Missing Events in C# Driver
 
@@ -17,12 +20,19 @@ The DataStax C# driver for Apache Cassandra has several limitations compared to 
 - `ICluster.HostAdded` - New node joins the cluster
 - `ICluster.HostRemoved` - Node permanently removed from cluster
 
-### Events NOT Available in C# Driver (but present in Java)
-- **`HostUp`** - Node comes back online
-- **`HostDown`** - Node goes offline
-- **Schema change events** - Table/keyspace modifications
-- **Connection state events** - Individual connection lifecycle
-- **Prepared statement events** - Statement preparation/invalidation
+### Events NOT Publicly Available in C# Driver (but present in Java)
+- **`HostUp`** - Node comes back online (exists internally but not exposed)
+- **`HostDown`** - Node goes offline (exists internally but not exposed)
+
+The C# driver tracks host state changes internally with `Host.Up` and `Host.Down` events, but these are marked as `internal` and not accessible to application code. In contrast, the Java driver provides a public `Host.StateListener` interface with `onUp()` and `onDown()` methods that applications can implement.
+
+### Why This Limitation Exists
+
+The C# driver's architecture differs from the Java driver:
+- The C# driver manages host states internally for connection pooling and load balancing
+- Host state events (`Host.Up` and `Host.Down`) exist but are intentionally kept internal
+- Applications can only observe cluster-level changes (nodes added/removed), not state transitions
+- This design choice simplifies the API but reduces visibility into cluster dynamics
 
 ## Critical Impact: The HostUp/HostDown Problem
 
@@ -55,6 +65,14 @@ Timeline of a typical rolling restart problem:
 4. Application may continue avoiding Node A
    - Connection pool not refreshed
    - Load imbalance persists
+
+### Evidence from Production Deployments
+
+Community reports confirm these issues:
+- **5-10 second delays** during automatic failover when nodes fail
+- **NoHostAvailableException** errors even when monitoring shows all nodes operational
+- **Unordered notifications** - receiving UP, DOWN, UP for the same state change
+- **Remote DC issues** - host state changes in remote datacenters may not be detected
 ```
 
 ## Why Your Application Doesn't Recover

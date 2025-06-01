@@ -112,12 +112,12 @@ For comprehensive documentation, see the **[Documentation Index](docs/README.md)
 
 ## ⚠️ C# Driver Limitations
 
-**Important**: The DataStax C# driver has significant limitations compared to the Java driver that affect failure detection and recovery:
+**Important**: The DataStax C# driver has architectural differences from the Java driver that affect failure detection and recovery:
 
-- **No HostUp/HostDown events** - The driver doesn't notify when nodes fail or recover ([CSHARP-183](https://datastax-oss.atlassian.net/browse/CSHARP-183))
-- **No proactive failure detection** - Failed connections discovered only when used
-- **Poor recovery during rolling restarts** - Applications may not reconnect automatically
-- **Stale connection pools** - Dead connections remain until manually refreshed
+- **No public HostUp/HostDown events** - The driver tracks state internally but doesn't expose state change events
+- **Limited cluster visibility** - Only HostAdded/HostRemoved events are available, not state transitions
+- **Delayed failure detection** - Failed connections discovered only when queries are executed
+- **Manual recovery often required** - Applications may need restart after cluster-wide outages
 
 These limitations can cause your C# applications to:
 - Continue using failed connections
@@ -127,7 +127,6 @@ These limitations can cause your C# applications to:
 ### Documentation and References
 - **[Detailed C# Driver Limitations Guide](docs/CSHARP_DRIVER_LIMITATIONS.md)** - Comprehensive guide with workarounds
 - **[Resilient Client Implementation](docs/RESILIENT_CLIENT_IMPLEMENTATION.md)** - Production-ready solution
-- [DataStax JIRA: CSHARP-183](https://datastax-oss.atlassian.net/browse/CSHARP-183) - HostUp/HostDown events (open since 2014)
 - [Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations) - Official driver docs
 - [Driver Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver) - C# vs Java
 

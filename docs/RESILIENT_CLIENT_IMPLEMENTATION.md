@@ -6,17 +6,17 @@ The `ResilientCassandraClient` is a production-grade wrapper around the DataStax
 
 ## Why This Implementation Exists
 
-The DataStax C# driver has significant limitations compared to the Java driver:
+The DataStax C# driver has architectural differences from the Java driver that limit cluster state visibility:
 
-1. **No HostUp/HostDown Events**: The C# driver does not fire events when nodes fail or recover ([CSHARP-183](https://datastax-oss.atlassian.net/browse/CSHARP-183))
-2. **No Proactive Failure Detection**: Failed connections are only discovered when queries are executed
-3. **Poor Recovery During Rolling Restarts**: Applications may not automatically reconnect after maintenance
-4. **Stale Connection Pools**: Dead connections remain in the pool until manually refreshed
+1. **No Public HostUp/HostDown Events**: While the C# driver tracks host states internally with `Host.Up` and `Host.Down` events, these are marked as `internal` and not accessible to application code
+2. **Limited Event Model**: Only `ICluster.HostAdded` and `ICluster.HostRemoved` events are exposed, not state transitions
+3. **Delayed Failure Detection**: Failed connections are only discovered when queries are executed
+4. **Manual Recovery Often Required**: Applications may not automatically recover after cluster-wide outages
 
-These limitations are documented in:
-- [DataStax C# Driver Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations)
-- [JIRA: Add HostUp/HostDown events (CSHARP-183)](https://datastax-oss.atlassian.net/browse/CSHARP-183)
-- [Driver Comparison: Java vs C#](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver)
+These limitations are evidenced by:
+- [C# Driver API](https://docs.datastax.com/en/latest-csharp-driver-api/api/Cassandra.ICluster.html) - Shows only HostAdded/HostRemoved events
+- [Java Driver Host.StateListener](https://docs.datastax.com/en/drivers/java/2.1/com/datastax/driver/core/Host.StateListener.html) - Provides onUp/onDown methods
+- Historical issues: CSHARP-252 (DOWN events not firing), CSHARP-878 (connecting to DOWN nodes)
 
 ## Implementation Details
 
@@ -303,7 +303,6 @@ cassandra-probe --contact-points node1:9042,node2:9042,node3:9042 --resilient-cl
 ## References
 
 - [DataStax C# Driver Documentation](https://docs.datastax.com/en/developer/csharp-driver/latest/)
-- [C# Driver GitHub Issues](https://github.com/datastax/csharp-driver/issues)
-- [JIRA: CSHARP-183 - Add HostUp/HostDown events](https://datastax-oss.atlassian.net/browse/CSHARP-183)
-- [Driver Feature Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver)
-- [Connection Pooling Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations)
+- [C# Driver API Reference](https://docs.datastax.com/en/latest-csharp-driver-api/)
+- [C# Driver GitHub Repository](https://github.com/datastax/csharp-driver)
+- [Java Driver Host.StateListener](https://docs.datastax.com/en/drivers/java/2.1/com/datastax/driver/core/Host.StateListener.html) - For comparison
