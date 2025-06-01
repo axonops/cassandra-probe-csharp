@@ -89,6 +89,12 @@ cassandra-probe schedule [schedule-options]
 | `--metrics` | `-m` | Enable metrics collection | false |
 | `--metrics-export` | - | Metrics export format | - |
 
+### Resilience Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|---------|
+| `--resilient-client` | - | Use resilient client that handles C# driver limitations | false |
+
 ## Examples
 
 ### Basic Probe
@@ -261,6 +267,35 @@ cassandra-probe \
   --connection-events \
   --output-file connection-events.log
 ```
+
+### Resilient Client Demonstration
+
+```bash
+# Run resilient client demo to see how it handles failures
+cassandra-probe \
+  --contact-points "node1:9042,node2:9042,node3:9042" \
+  --resilient-client
+
+# With authentication
+cassandra-probe \
+  --contact-points cluster:9042 \
+  -u cassandra \
+  -p cassandra \
+  --resilient-client
+
+# Verbose mode to see all recovery details
+cassandra-probe \
+  --contact-points cluster:9042 \
+  --resilient-client \
+  --verbose \
+  --log-level Debug
+```
+
+The resilient client demonstration:
+- Shows standard vs resilient client behavior side-by-side
+- Demonstrates automatic failure detection and recovery
+- Logs all state transitions and recovery actions
+- Provides production-ready code that can be copied to your application
 
 ### Configuration File Usage
 

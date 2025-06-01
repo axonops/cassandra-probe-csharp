@@ -8,6 +8,7 @@ using CassandraProbe.Logging;
 using CassandraProbe.Logging.Formatters;
 using CassandraProbe.Scheduling;
 using CassandraProbe.Services;
+using CassandraProbe.Services.Resilience;
 using CommandLine;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -70,11 +71,21 @@ class Program
 
         // Setup DI
         var services = new ServiceCollection();
-        ConfigureServices(services, config);
+        ConfigureServices(services, config, options);
         _serviceProvider = services.BuildServiceProvider();
 
         var logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("Cassandra Probe starting...");
+
+        // Handle resilient client demonstration
+        if (options.UseResilientClient)
+        {
+            logger.LogInformation("Running resilient client demonstration...");
+            var resilienceDemo = _serviceProvider.GetRequiredService<ResilienceDemo>();
+            ResilienceScenarios.LogScenarios(logger);
+            await resilienceDemo.StartDemoAsync();
+            return 0;
+        }
 
         // Initialize monitoring services
         var sessionManager = _serviceProvider.GetRequiredService<ISessionManager>() as SessionManager;
@@ -317,7 +328,7 @@ class Program
             : envValue.Split(',', StringSplitOptions.RemoveEmptyEntries).ToList();
     }
 
-    private static void ConfigureServices(IServiceCollection services, ProbeConfiguration config)
+    private static void ConfigureServices(IServiceCollection services, ProbeConfiguration config, CommandLineOptions options)
     {
         // Configuration
         services.AddSingleton(config);
@@ -338,6 +349,16 @@ class Program
         // Monitoring services
         services.AddSingleton<MetadataMonitor>();
         services.AddSingleton<HostStateMonitor>();
+
+        // Resilient client services (if enabled)
+        if (options.UseResilientClient)
+        {
+            services.AddSingleton<IResilientCassandraClient>(provider => 
+                new ResilientCassandraClient(
+                    provider.GetRequiredService<ProbeConfiguration>(),
+                    provider.GetRequiredService<ILogger<ResilientCassandraClient>>()));
+            services.AddSingleton<ResilienceDemo>();
+        }
 
         // Probe actions
         services.AddScoped<IProbeAction, SocketProbe>();

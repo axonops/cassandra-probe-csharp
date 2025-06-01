@@ -119,6 +119,10 @@ public class CommandLineOptions
     [Option("metrics-export", HelpText = "Metrics export format")]
     public string? MetricsExportFormat { get; set; }
 
+    // Resilience Options
+    [Option("resilient-client", HelpText = "Use resilient client that handles C# driver limitations")]
+    public bool UseResilientClient { get; set; }
+
     // Other Options
     [Option("config", HelpText = "Path to configuration file")]
     public string? ConfigFile { get; set; }

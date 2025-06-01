@@ -67,6 +67,9 @@ Expand-Archive cassandra-probe-*.zip
 
 # Test specific CQL query
 ./cassandra-probe --contact-points cluster:9042 --test-cql "SELECT * FROM system.local"
+
+# Run resilient client demonstration (shows how to handle C# driver limitations)
+./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
 ## 📋 Requirements
