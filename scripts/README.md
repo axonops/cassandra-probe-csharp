@@ -8,7 +8,18 @@ All scripts support both **Docker** and **Podman**. The scripts automatically de
 
 ## Scripts Overview
 
-### 1. `verify-resilient-client.sh`
+### 1. `quick-demo.sh`
+Fastest way to see the resilient client in action.
+- Automatically detects or starts Cassandra
+- Compares standard vs resilient client behavior
+- Minimal setup required
+- Perfect for first-time users
+
+```bash
+./quick-demo.sh
+```
+
+### 2. `verify-resilient-client.sh`
 Quick verification script that tests if the resilient client is working correctly.
 - Checks for Cassandra availability
 - Tests basic connectivity
@@ -19,7 +30,7 @@ Quick verification script that tests if the resilient client is working correctl
 ./verify-resilient-client.sh
 ```
 
-### 2. `test-resilient-client-simple.sh`
+### 3. `test-resilient-client-simple.sh`
 Simple test script that runs the resilient client against an existing Cassandra instance.
 - Requires Cassandra to be already running
 - Shows resilient client features
@@ -29,7 +40,7 @@ Simple test script that runs the resilient client against an existing Cassandra 
 ./test-resilient-client-simple.sh
 ```
 
-### 3. `demo-resilient-client.sh`
+### 4. `demo-resilient-client.sh`
 Interactive demo with a 3-node Cassandra cluster managed via Docker/Podman Compose.
 - Creates and manages a test cluster
 - Demonstrates failure scenarios
@@ -48,7 +59,7 @@ Interactive demo with a 3-node Cassandra cluster managed via Docker/Podman Compo
 ./demo-resilient-client.sh cleanup   # Clean up
 ```
 
-### 4. `test-resilient-client.sh`
+### 5. `test-resilient-client.sh`
 Comprehensive test suite that creates containers and runs various failure scenarios.
 - Creates individual Cassandra containers
 - Tests node failures
@@ -66,7 +77,7 @@ Comprehensive test suite that creates containers and runs various failure scenar
 ./test-resilient-client.sh stop           # Stop cluster
 ```
 
-### 5. `container-runtime.sh`
+### 6. `container-runtime.sh`
 Helper script that detects and configures the container runtime.
 - Automatically sourced by other scripts
 - Sets CONTAINER_RUNTIME and COMPOSE_CMD variables

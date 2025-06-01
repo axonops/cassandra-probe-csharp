@@ -103,6 +103,13 @@ create_test_schema() {
 start_cluster() {
     log $BLUE "Starting Cassandra cluster with $NUM_NODES nodes..."
     
+    # Check if containers already exist
+    if is_container_running "cassandra-node-1"; then
+        log $YELLOW "Cassandra cluster is already running."
+        log $YELLOW "Use option 2 to stop it first if you want to restart."
+        return 0
+    fi
+    
     # Create network if it doesn't exist
     $CONTAINER_RUNTIME network create $NETWORK_NAME 2>/dev/null || true
     
@@ -159,20 +166,20 @@ stop_cluster() {
 run_resilient_probe() {
     local duration=${1:-120}  # Default 2 minutes
     
+    # Check if cluster is running
+    if ! is_container_running "cassandra-node-1"; then
+        log $RED "Cassandra cluster is not running. Please start it first (option 1)."
+        return 1
+    fi
+    
     log $BLUE "Building the application..."
     cd "$PROJECT_ROOT"
     dotnet build -c Release
     
     log $BLUE "Starting resilient client probe (will run for ${duration}s)..."
     
-    # Get container IPs
-    local contact_points=""
-    for i in $(seq 1 $NUM_NODES); do
-        if [ -n "$contact_points" ]; then
-            contact_points+=","
-        fi
-        contact_points+="cassandra-node-$i:9042"
-    done
+    # Use localhost since we're mapping port 9042
+    local contact_points="localhost:9042"
     
     # Run the probe with resilient client
     timeout $duration dotnet run --project src/CassandraProbe.Cli -- \
@@ -229,6 +236,12 @@ simulate_node_failure() {
 run_comparison_test() {
     log $BLUE "Running comparison test: Standard vs Resilient client..."
     
+    # Check if cluster is running
+    if ! is_container_running "cassandra-node-1"; then
+        log $RED "Cassandra cluster is not running. Please start it first (option 1)."
+        return 1
+    fi
+    
     # Create a simple test script
     cat > /tmp/cassandra_probe_test.sh << EOF
 #!/bin/bash
@@ -244,7 +257,7 @@ echo "Running queries with resilient client during node failure..."
 
 # Run resilient probe
 dotnet run --project src/CassandraProbe.Cli -- \\
-    --contact-points "cassandra-node-1:9042,cassandra-node-2:9042,cassandra-node-3:9042" \\
+    --contact-points "localhost:9042" \\
     --resilient-client \\
     --test-cql "INSERT INTO resilient_test.test_data (id, timestamp, value, client_type) VALUES (uuid(), toTimestamp(now()), 'test', 'resilient')" \\
     -i 2 \\
