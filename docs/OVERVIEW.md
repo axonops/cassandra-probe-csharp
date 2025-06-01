@@ -72,7 +72,7 @@ The application follows a modular architecture with clear separation of concerns
 
 ## Requirements
 
-- .NET 6.0 or later
+- .NET 9.0 or later
 - Apache Cassandra 4.0 or later (optimized for 4.1+)
 - Access to at least one Cassandra contact point
 - Appropriate network permissions for probing

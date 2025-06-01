@@ -17,7 +17,10 @@ Cassandra Probe C# follows a clean, modular architecture based on SOLID principl
 ┌─────────────────────────────────────────────────────────────────┐
 │                      Service Layer                               │
 │  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐ │
-│  │ ProbeOrchestrator│  │ClusterDiscovery  │  │Authentication│ │
+│  │ ProbeOrchestrator│  │ClusterDiscovery  │  │SessionManager │ │
+│  └─────────────────┘  └──────────────────┘  └───────────────┘ │
+│  ┌─────────────────┐  ┌──────────────────┐  ┌───────────────┐ │
+│  │ConnectionMonitor │  │ MetadataMonitor  │  │HostStateMonitor│ │
 │  └─────────────────┘  └──────────────────┘  └───────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
                                 │
@@ -72,8 +75,10 @@ Business logic orchestration and coordination.
 **Key Components:**
 - `ProbeOrchestrator`: Coordinates probe execution
 - `ClusterDiscoveryService`: Discovers Cassandra nodes
-- `AuthenticationService`: Manages credentials
-- `MetricsCollector`: Collects performance metrics
+- `SessionManager`: Manages Cassandra driver sessions and cluster events
+- `ConnectionMonitor`: Tracks connection states and reconnection history
+- `MetadataMonitor`: Monitors cluster metadata and schema changes
+- `HostStateMonitor`: Detects host UP/DOWN state transitions
 
 ### 3. Core Layer
 Domain models and contracts.

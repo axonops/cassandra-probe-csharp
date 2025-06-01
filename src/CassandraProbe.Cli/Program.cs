@@ -76,6 +76,22 @@ class Program
         var logger = _serviceProvider.GetRequiredService<ILogger<Program>>();
         logger.LogInformation("Cassandra Probe starting...");
 
+        // Initialize monitoring services
+        var sessionManager = _serviceProvider.GetRequiredService<ISessionManager>() as SessionManager;
+        var metadataMonitor = _serviceProvider.GetRequiredService<MetadataMonitor>();
+        var hostStateMonitor = _serviceProvider.GetRequiredService<HostStateMonitor>();
+        
+        if (sessionManager != null)
+        {
+            sessionManager.SetMetadataMonitor(metadataMonitor);
+        }
+        hostStateMonitor.SetMetadataMonitor(metadataMonitor);
+
+        // Start background monitoring services
+        var cts = new CancellationTokenSource();
+        var metadataTask = metadataMonitor.StartAsync(cts.Token);
+        var hostStateTask = hostStateMonitor.StartAsync(cts.Token);
+
         try
         {
             // Handle scheduled execution
@@ -93,6 +109,19 @@ class Program
         {
             logger.LogError(ex, "Probe execution failed");
             return 1;
+        }
+        finally
+        {
+            // Stop monitoring services
+            cts.Cancel();
+            try
+            {
+                await Task.WhenAll(metadataTask, hostStateTask);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when cancelling
+            }
         }
     }
 
@@ -305,6 +334,10 @@ class Program
         services.AddSingleton<IConnectionMonitor, ConnectionMonitor>();
         services.AddScoped<IClusterDiscovery, ClusterDiscoveryService>();
         services.AddScoped<IProbeOrchestrator, ProbeOrchestrator>();
+        
+        // Monitoring services
+        services.AddSingleton<MetadataMonitor>();
+        services.AddSingleton<HostStateMonitor>();
 
         // Probe actions
         services.AddScoped<IProbeAction, SocketProbe>();

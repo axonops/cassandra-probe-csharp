@@ -5,7 +5,7 @@ This guide provides instructions for testing Cassandra Probe C# locally using Do
 ## Prerequisites
 
 - Docker or Podman with docker-compose/podman-compose installed
-- .NET 6.0+ SDK (for building from source)
+- .NET 9.0 SDK (for building from source)
 - Cassandra Probe executable for your platform
 
 ## Supported Cassandra Versions

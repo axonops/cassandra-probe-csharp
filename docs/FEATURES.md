@@ -340,6 +340,32 @@ Extensible result export.
 - Monitoring system integration
 - Custom formatters
 
+## Cluster Monitoring and Event Handling
+
+### Real-time Cluster Event Monitoring
+
+The probe provides comprehensive cluster topology monitoring:
+
+**Event Types:**
+- **[CLUSTER EVENT] Node ADDED** - New node joins the cluster
+- **[CLUSTER EVENT] Node REMOVED** - Node leaves the cluster  
+- **[CLUSTER EVENT] Node UP detected** - Node comes online (via polling)
+- **[CLUSTER EVENT] Node DOWN detected** - Node goes offline (via polling)
+
+**Metadata Monitoring:**
+- Initial cluster metadata logged on connection
+- Periodic metadata updates (every minute)
+- Schema change detection
+- Host state tracking
+
+**Monitoring Services:**
+- `SessionManager` - Handles driver events and initial metadata
+- `ConnectionMonitor` - Tracks connection states and history
+- `MetadataMonitor` - Periodic metadata and schema monitoring
+- `HostStateMonitor` - Polls for UP/DOWN state changes
+
+See [Cluster Events Documentation](CLUSTER_EVENTS.md) for implementation details.
+
 ## Connection Recovery and Resilience Testing
 
 ### Driver Reconnection Capabilities
@@ -359,13 +385,15 @@ The probe is specifically designed to test and validate Cassandra driver reconne
 4. **Cluster Resizing**: Nodes added or removed
 5. **Complete Outages**: All nodes temporarily unavailable
 
-**Driver Events Monitored:**
-- `HostUp` - Node becomes available
-- `HostDown` - Node becomes unavailable  
-- `HostAdded` - New node joins cluster
-- `HostRemoved` - Node leaves cluster
-- Connection pool state changes
-- Reconnection attempt metrics
+**Cluster Events and Monitoring:**
+- `HostAdded` - New node joins cluster (native driver event)
+- `HostRemoved` - Node leaves cluster (native driver event)
+- Host UP/DOWN state changes (detected via polling)
+- Cluster metadata changes (periodic monitoring)
+- Schema changes (detected by table count tracking)
+- Connection state transitions
+
+> **Note**: See [Cluster Events Documentation](CLUSTER_EVENTS.md) for detailed information about event monitoring capabilities.
 
 **Logging Detail Levels:**
 - **INFO**: Successful connections and reconnections

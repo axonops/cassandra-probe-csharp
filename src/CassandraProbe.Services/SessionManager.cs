@@ -16,6 +16,7 @@ public class SessionManager : ISessionManager, IDisposable
     private readonly ILogger<SessionManager> _logger;
     private readonly IConnectionMonitor _connectionMonitor;
     private readonly ProbeConfiguration _configuration;
+    private MetadataMonitor? _metadataMonitor;
     private bool _disposed;
 
     public SessionManager(
@@ -45,6 +46,7 @@ public class SessionManager : ISessionManager, IDisposable
                     {
                         _session = _cluster.Connect();
                         _logger.LogInformation("Session established and will be reused for all operations");
+                        LogInitialClusterMetadata();
                     }
                     catch (Exception ex)
                     {
@@ -59,6 +61,11 @@ public class SessionManager : ISessionManager, IDisposable
     }
 
     public ICluster? GetCluster() => _cluster;
+
+    public void SetMetadataMonitor(MetadataMonitor monitor)
+    {
+        _metadataMonitor = monitor;
+    }
 
     private ICluster CreateCluster()
     {
@@ -155,12 +162,14 @@ public class SessionManager : ISessionManager, IDisposable
         _logger.LogInformation("[CLUSTER EVENT] Node ADDED: {Address} DC={Datacenter} Rack={Rack}", 
             host.Address, host.Datacenter, host.Rack);
         _connectionMonitor.RecordHostAdded(host);
+        _metadataMonitor?.LogClusterMetadataAfterEvent("HostAdded");
     }
 
     private void OnHostRemoved(Host host)
     {
         _logger.LogInformation("[CLUSTER EVENT] Node REMOVED: {Address}", host.Address);
         _connectionMonitor.RecordHostRemoved(host);
+        _metadataMonitor?.LogClusterMetadataAfterEvent("HostRemoved");
     }
 
     private bool ValidateServerCertificate(object sender, X509Certificate? certificate, 
@@ -208,5 +217,42 @@ public class SessionManager : ISessionManager, IDisposable
 
         _disposed = true;
         GC.SuppressFinalize(this);
+    }
+
+    private void LogInitialClusterMetadata()
+    {
+        if (_cluster == null) return;
+
+        try
+        {
+            var metadata = _cluster.Metadata;
+            var hosts = _cluster.AllHosts().ToList();
+            
+            _logger.LogInformation("[CLUSTER METADATA] Connected to cluster: Name={ClusterName}",
+                metadata.ClusterName);
+            
+            _logger.LogInformation("[CLUSTER METADATA] Cluster topology: {HostCount} hosts across {DcCount} datacenters",
+                hosts.Count, hosts.Select(h => h.Datacenter).Distinct().Count());
+            
+            // Log each host
+            foreach (var host in hosts.OrderBy(h => h.Datacenter).ThenBy(h => h.Address.ToString()))
+            {
+                _logger.LogInformation("[CLUSTER METADATA] Host: {Address} DC={Datacenter} Rack={Rack} State={State} Version={Version}",
+                    host.Address, host.Datacenter, host.Rack, 
+                    host.IsUp ? "UP" : "DOWN", host.CassandraVersion);
+            }
+            
+            // Log keyspaces (excluding system keyspaces)
+            var keyspaces = metadata.GetKeyspaces().Where(k => !k.StartsWith("system", StringComparison.OrdinalIgnoreCase)).ToList();
+            if (keyspaces.Any())
+            {
+                _logger.LogInformation("[CLUSTER METADATA] User keyspaces: {Keyspaces}",
+                    string.Join(", ", keyspaces));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error logging initial cluster metadata");
+        }
     }
 }

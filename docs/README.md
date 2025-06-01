@@ -14,6 +14,7 @@ Welcome to the Cassandra Probe documentation. This directory contains comprehens
 - **[Architecture](ARCHITECTURE.md)** - System design and component overview
 - **[Features](FEATURES.md)** - Detailed feature descriptions and capabilities
 - **[Cassandra Compatibility](CASSANDRA-COMPATIBILITY.md)** - Version requirements and compatibility
+- **[Cluster Events](CLUSTER_EVENTS.md)** - Cluster monitoring and event handling
 
 ## 👩‍💻 Developer Documentation
 
@@ -26,10 +27,9 @@ Welcome to the Cassandra Probe documentation. This directory contains comprehens
 - **[Local Testing](LOCAL-TESTING.md)** - Setting up local test environments
 - **[Testing Scenarios](TESTING.md)** - Comprehensive testing patterns
 
-## 📖 Legacy Documentation
+## 📖 Additional Documentation
 
-- **[Overview](OVERVIEW.md)** - Original project overview (reference)
-- **[Claude AI Guide](CLAUDE.md)** - AI assistant instructions (development reference)
+- **[Overview](OVERVIEW.md)** - Original project overview
 
 ## Quick Links
 
