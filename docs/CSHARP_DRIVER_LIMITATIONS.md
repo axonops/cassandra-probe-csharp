@@ -315,87 +315,266 @@ var result = await client.ExecuteAsync("SELECT * FROM my_table WHERE id = ?", id
 
 **Complete implementation:**
 ```csharp
-public class ResilientCassandraClient
+public class ResilientCassandraClient : IDisposable
 {
     private readonly ICluster _cluster;
     private readonly ISession _session;
     private readonly Timer _monitorTimer;
     private readonly Timer _refreshTimer;
+    private readonly Dictionary<IPAddress, HostState> _hostStates = new();
+    private readonly ILogger _logger;
     
-    public ResilientCassandraClient(string[] contactPoints)
+    public ResilientCassandraClient(string[] contactPoints, ILogger logger)
     {
+        _logger = logger;
+        
         _cluster = Cluster.Builder()
             .AddContactPoints(contactPoints)
-            .WithReconnectionPolicy(new ExponentialReconnectionPolicy(1000, 30000))
+            
+            // RECONNECTION POLICY: Controls how the driver attempts to reconnect to nodes
+            // ExponentialReconnectionPolicy: Starts at baseDelay, doubles each attempt up to maxDelay
+            // - baseDelay: 1000ms (1 second) - Initial wait before first reconnection attempt
+            // - maxDelay: 30000ms (30 seconds) - Maximum wait between attempts
+            // Alternative: ConstantReconnectionPolicy(1000) - Always wait 1 second between attempts
+            .WithReconnectionPolicy(new ExponentialReconnectionPolicy(
+                baseDelay: 1000,    // Start reconnecting after 1 second
+                maxDelay: 30000))   // Cap at 30 seconds between attempts
+            
+            // SOCKET OPTIONS: Network-level configuration
             .WithSocketOptions(new SocketOptions()
+                // Connect timeout: How long to wait for initial TCP connection
+                // 3000ms is aggressive but good for local/low-latency networks
+                // Increase to 5000-10000ms for cross-region deployments
                 .SetConnectTimeoutMillis(3000)
+                
+                // Read timeout: How long to wait for query response
+                // 5000ms works for most queries, increase for analytical workloads
+                // This helps detect dead connections quickly
                 .SetReadTimeoutMillis(5000)
-                .SetKeepAlive(true))
+                
+                // TCP KeepAlive: Prevents firewalls from closing idle connections
+                // Critical for long-lived connections through NAT/firewalls
+                .SetKeepAlive(true)
+                
+                // Optional: Configure TCP NoDelay for low-latency requirements
+                .SetTcpNoDelay(true))
+            
+            // QUERY OPTIONS: Default query behavior
             .WithQueryOptions(new QueryOptions()
+                // Consistency level: Balances consistency vs availability
+                // LocalQuorum: Good default, survives single node failures
+                // Options: ONE (fastest), QUORUM, ALL (strongest), LOCAL_ONE, LOCAL_QUORUM
                 .SetConsistencyLevel(ConsistencyLevel.LocalQuorum)
-                .SetDefaultIdempotence(true))
+                
+                // Idempotence: Marks queries safe to retry/speculate
+                // Critical for automatic retries and speculative execution
+                .SetDefaultIdempotence(true)
+                
+                // Optional: Set default timeout per query (overrides socket timeout)
+                .SetDefaultTimeout(5000))
+            
+            // LOAD BALANCING POLICY: How queries are distributed across nodes
+            // TokenAwarePolicy: Routes queries to nodes owning the data (reduces latency)
+            // Wraps DCAwareRoundRobinPolicy: Prefers local datacenter, round-robins within DC
+            .WithLoadBalancingPolicy(new TokenAwarePolicy(
+                new DCAwareRoundRobinPolicy(
+                    // Optionally specify local DC, otherwise auto-detected
+                    localDc: null,
+                    // How many nodes in remote DCs to use as fallback
+                    usedHostsPerRemoteDc: 2)))
+            
+            // RETRY POLICY: Handles transient failures
+            // DefaultRetryPolicy: Retries with same consistency on certain errors
+            // Alternative: DowngradingConsistencyRetryPolicy - Tries lower consistency
+            .WithRetryPolicy(new DefaultRetryPolicy())
+            
+            // SPECULATIVE EXECUTION: Send query to multiple nodes for lower latency
+            // ConstantSpeculativeExecutionPolicy: Fixed delay before speculation
+            // - delay: 200ms - If no response in 200ms, try another node
+            // - maxSpeculativeExecutions: 2 - Try up to 2 additional nodes
+            // Only use with idempotent queries!
             .WithSpeculativeExecutionPolicy(
-                new ConstantSpeculativeExecutionPolicy(200, 2))
+                new ConstantSpeculativeExecutionPolicy(
+                    delay: 200,  // p99 latency is a good value here
+                    maxSpeculativeExecutions: 2))
+            
             .Build();
         
         _session = _cluster.Connect();
+        _logger.LogInformation("Cassandra client initialized with {Count} contact points", contactPoints.Length);
         
-        // Start monitoring
-        _monitorTimer = new Timer(MonitorHosts, null, 
-            TimeSpan.Zero, TimeSpan.FromSeconds(5));
-        
-        // Periodic connection refresh
-        _refreshTimer = new Timer(RefreshConnections, null,
-            TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(1));
-    }
-    
-    private void MonitorHosts(object state)
-    {
+        // Initialize host state tracking
         foreach (var host in _cluster.AllHosts())
         {
-            if (!host.IsUp)
-            {
-                Console.WriteLine($"Host {host.Address} is DOWN");
-                // Implement custom recovery logic
-            }
+            _hostStates[host.Address.Address] = new HostState 
+            { 
+                IsUp = host.IsUp, 
+                LastSeen = DateTime.UtcNow 
+            };
         }
+        
+        // Start host monitoring - Check every 5 seconds
+        // Adjust based on your failure detection requirements
+        // Lower = faster detection but more overhead
+        _monitorTimer = new Timer(MonitorHosts, null, 
+            dueTime: TimeSpan.Zero,           // Start immediately
+            period: TimeSpan.FromSeconds(5));  // Check every 5 seconds
+        
+        // Periodic connection refresh - Every 60 seconds
+        // Prevents stale connections from accumulating
+        // Increase interval if you have many nodes (to reduce overhead)
+        _refreshTimer = new Timer(RefreshConnections, null,
+            dueTime: TimeSpan.FromMinutes(1),  // First refresh after 1 minute
+            period: TimeSpan.FromMinutes(1));   // Then every minute
     }
     
-    private async void RefreshConnections(object state)
+    private void MonitorHosts(object? state)
     {
         try
         {
-            // Force metadata refresh
-            await _session.RefreshSchemaAsync();
-            
-            // Test each host
-            var tasks = _cluster.AllHosts().Select(host =>
-                TestHost(host)).ToArray();
-            
-            await Task.WhenAll(tasks);
+            foreach (var host in _cluster.AllHosts())
+            {
+                var currentState = host.IsUp;
+                var hostAddress = host.Address.Address;
+                
+                if (_hostStates.TryGetValue(hostAddress, out var previousState))
+                {
+                    // Detect state transitions
+                    if (previousState.IsUp && !currentState)
+                    {
+                        _logger.LogWarning("Host {Host} transitioned to DOWN state", hostAddress);
+                        
+                        // CUSTOM RECOVERY LOGIC HERE
+                        // Examples:
+                        // - Notify monitoring system
+                        // - Adjust application behavior
+                        // - Trigger failover procedures
+                        // - Update circuit breakers
+                        
+                        OnHostDown(host);
+                    }
+                    else if (!previousState.IsUp && currentState)
+                    {
+                        _logger.LogInformation("Host {Host} transitioned to UP state", hostAddress);
+                        
+                        // CUSTOM RECOVERY LOGIC HERE
+                        // Examples:
+                        // - Re-enable traffic to this node
+                        // - Reset circuit breakers
+                        // - Rebalance load
+                        
+                        OnHostUp(host);
+                    }
+                    
+                    // Update state
+                    previousState.IsUp = currentState;
+                    previousState.LastSeen = DateTime.UtcNow;
+                }
+            }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Connection refresh failed: {ex.Message}");
+            _logger.LogError(ex, "Error monitoring host states");
         }
     }
     
-    private async Task TestHost(Host host)
+    private async void RefreshConnections(object? state)
     {
         try
         {
-            var statement = new SimpleStatement("SELECT now() FROM system.local")
-                .SetHost(host)
-                .SetIdempotence(true);
+            // Force metadata refresh - Updates cluster topology information
+            // This ensures we have the latest view of the cluster
+            await _session.RefreshSchemaAsync();
             
-            await _session.ExecuteAsync(statement);
+            // Test each host with a lightweight query
+            // This forces the driver to validate/refresh connections
+            var tasks = _cluster.AllHosts().Select(host => TestHostConnection(host));
+            
+            var results = await Task.WhenAll(tasks);
+            
+            var successCount = results.Count(r => r);
+            _logger.LogDebug("Connection refresh completed: {Success}/{Total} hosts responding", 
+                successCount, results.Length);
         }
-        catch
+        catch (Exception ex)
         {
-            Console.WriteLine($"Host {host.Address} is not responding");
+            _logger.LogError(ex, "Connection refresh failed");
         }
     }
-}
+    
+    private async Task<bool> TestHostConnection(Host host)
+    {
+        try
+        {
+            // Use a simple, fast query that works on any Cassandra version
+            // SetHost() forces execution on specific node
+            // SetIdempotence() makes it safe for retries
+            var statement = new SimpleStatement("SELECT now() FROM system.local")
+                .SetHost(host)
+                .SetIdempotence(true)
+                .SetConsistencyLevel(ConsistencyLevel.One)  // Use ONE for health checks
+                .SetTimeout(2000);  // Short timeout for health checks
+            
+            await _session.ExecuteAsync(statement);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Host {Host} health check failed: {Error}", 
+                host.Address, ex.Message);
+            return false;
+        }
+    }
+    
+    // Execute queries with automatic failover and retry logic
+    public async Task<RowSet> ExecuteAsync(string cql, params object[] values)
+    {
+        var statement = new SimpleStatement(cql, values)
+            .SetIdempotence(true);  // Enable retries and speculation
+        
+        return await _session.ExecuteAsync(statement);
+    }
+    
+    // Execute with custom consistency level
+    public async Task<RowSet> ExecuteAsync(string cql, ConsistencyLevel consistency, params object[] values)
+    {
+        var statement = new SimpleStatement(cql, values)
+            .SetIdempotence(true)
+            .SetConsistencyLevel(consistency);
+        
+        return await _session.ExecuteAsync(statement);
+    }
+    
+    // Override these methods with your application-specific logic
+    protected virtual void OnHostDown(Host host)
+    {
+        // Example implementations:
+        // - Remove host from application-level routing
+        // - Alert operations team
+        // - Activate disaster recovery procedures
+    }
+    
+    protected virtual void OnHostUp(Host host)
+    {
+        // Example implementations:
+        // - Add host back to routing pool
+        // - Reset error counters
+        // - Rebalance application load
+    }
+    
+    public void Dispose()
+    {
+        _monitorTimer?.Dispose();
+        _refreshTimer?.Dispose();
+        _session?.Dispose();
+        _cluster?.Dispose();
+    }
+    
+    private class HostState
+    {
+        public bool IsUp { get; set; }
+        public DateTime LastSeen { get; set; }
+    }
 ```
 
 ## Testing Your Recovery Implementation
