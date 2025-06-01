@@ -23,7 +23,7 @@ public class ClusterDiscoveryService : IClusterDiscovery
 
     public async Task<ClusterTopology> DiscoverAsync(ProbeConfiguration config)
     {
-        _logger.LogInformation("Starting cluster discovery...");
+        _logger.LogDebug("Starting cluster discovery...");
 
         var session = await _sessionManager.GetSessionAsync();
         var cluster = _sessionManager.GetCluster();
@@ -52,10 +52,8 @@ public class ClusterDiscoveryService : IClusterDiscovery
             AddToDatacenterMap(topology, peer);
         }
 
-        _logger.LogInformation("Discovered {Count} nodes in cluster '{ClusterName}'", 
-            topology.TotalHosts, topology.ClusterName);
-        _logger.LogInformation("Nodes by status - Up: {Up}, Down: {Down}", 
-            topology.UpHosts, topology.DownHosts);
+        _logger.LogInformation("Cluster '{ClusterName}': {Count} nodes (Up: {Up}, Down: {Down})", 
+            topology.ClusterName, topology.TotalHosts, topology.UpHosts, topology.DownHosts);
 
         _topology = topology;
         return topology;
@@ -143,7 +141,7 @@ public class ClusterDiscoveryService : IClusterDiscovery
                 peers.Add(hostProbe);
             }
 
-            _logger.LogInformation("Discovered {Count} peer nodes", peers.Count);
+            _logger.LogDebug("Discovered {Count} peer nodes", peers.Count);
         }
         catch (Exception ex)
         {

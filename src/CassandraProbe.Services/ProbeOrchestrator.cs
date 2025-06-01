@@ -29,8 +29,7 @@ public class ProbeOrchestrator : IProbeOrchestrator
     public async Task<ProbeSession> ExecuteProbesAsync(ProbeConfiguration config)
     {
         var session = new ProbeSession();
-        _logger.LogInformation("Starting probe session {SessionId}", session.Id);
-
+        
         try
         {
             // Ensure connection is established (reuses existing session)
@@ -85,14 +84,14 @@ public class ProbeOrchestrator : IProbeOrchestrator
             var failureCount = results.Length - successCount;
             
             _logger.LogInformation(
-                "Probe session {SessionId} completed in {Duration:F2}s. Success: {Success}, Failures: {Failures}",
-                session.Id, session.Duration.TotalSeconds, successCount, failureCount);
+                "Probe session completed: {Duration:F2}s, {Success} succeeded, {Failures} failed",
+                session.Duration.TotalSeconds, successCount, failureCount);
 
             return session;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during probe session {SessionId}", session.Id);
+            _logger.LogError(ex, "Probe session failed");
             session.EndTime = DateTime.UtcNow;
             throw;
         }
@@ -102,19 +101,12 @@ public class ProbeOrchestrator : IProbeOrchestrator
     {
         try
         {
-            _logger.LogDebug("Executing {ProbeName} on {Host}", probe.Name, host.Address);
-            
             var result = await probe.ExecuteAsync(host, context);
             
             // Fire event
             ProbeCompleted?.Invoke(this, new ProbeCompletedEventArgs { Result = result });
             
-            if (result.Success)
-            {
-                _logger.LogDebug("{ProbeName} succeeded on {Host} in {Duration:F2}ms",
-                    probe.Name, host.Address, result.Duration.TotalMilliseconds);
-            }
-            else
+            if (!result.Success)
             {
                 _logger.LogWarning("{ProbeName} failed on {Host}: {Error}",
                     probe.Name, host.Address, result.ErrorMessage);

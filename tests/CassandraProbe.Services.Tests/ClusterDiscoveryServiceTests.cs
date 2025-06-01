@@ -38,11 +38,10 @@ public class ClusterDiscoveryServiceTests
         await act.Should().ThrowAsync<Exception>()
             .WithMessage("Connection failed");
 
-        // The implementation logs "Starting cluster discovery..." but may not log error
-        // if exception is thrown before error handling
+        // The implementation logs "Starting cluster discovery..." at debug level
         _loggerMock.Verify(
             x => x.Log(
-                It.Is<LogLevel>(l => l == LogLevel.Information),
+                LogLevel.Debug,
                 It.IsAny<EventId>(),
                 It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Starting cluster discovery")),
                 It.IsAny<Exception>(),

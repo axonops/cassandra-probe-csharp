@@ -143,21 +143,25 @@ public class SessionManager : ISessionManager, IDisposable
     {
         if (_cluster == null) return;
 
+        // Register all cluster event handlers
         _cluster.HostAdded += OnHostAdded;
         _cluster.HostRemoved += OnHostRemoved;
+        
+        _logger.LogInformation("Cluster event handlers registered for topology changes");
     }
 
     private void OnHostAdded(Host host)
     {
-        _logger.LogInformation("Host added: {Address}:{Port} (DC: {Datacenter})", 
-            host.Address, host.Address.Port, host.Datacenter);
+        _logger.LogInformation("[CLUSTER EVENT] Node ADDED: {Address} DC={Datacenter} Rack={Rack}", 
+            host.Address, host.Datacenter, host.Rack);
+        _connectionMonitor.RecordHostAdded(host);
     }
 
     private void OnHostRemoved(Host host)
     {
-        _logger.LogInformation("Host removed: {Address}:{Port}", host.Address, host.Address.Port);
+        _logger.LogInformation("[CLUSTER EVENT] Node REMOVED: {Address}", host.Address);
+        _connectionMonitor.RecordHostRemoved(host);
     }
-
 
     private bool ValidateServerCertificate(object sender, X509Certificate? certificate, 
         X509Chain? chain, SslPolicyErrors sslPolicyErrors)

@@ -9,6 +9,12 @@ public interface IConnectionMonitor
     ConnectionPoolStatus GetPoolStatus();
     IEnumerable<ReconnectionEvent> GetReconnectionHistory();
     event EventHandler<ConnectionStateChangedEventArgs>? ConnectionStateChanged;
+    
+    // Cluster event recording methods
+    void RecordHostAdded(Host host);
+    void RecordHostRemoved(Host host);
+    void RecordHostDown(Host host);
+    void RecordHostUp(Host host);
 }
 
 public class ConnectionPoolStatus

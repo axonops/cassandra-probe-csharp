@@ -98,6 +98,91 @@ public class ConnectionMonitor : IConnectionMonitor
 
 
 
+    public void RecordHostAdded(Host host)
+    {
+        var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
+        RecordReconnectionEvent(new ReconnectionEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Host = endpoint,
+            EventType = ReconnectionEventType.ReconnectionSuccess,
+            Message = $"Node added to cluster: DC={host.Datacenter}, Rack={host.Rack}"
+        });
+    }
+
+    public void RecordHostRemoved(Host host)
+    {
+        var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
+        RecordReconnectionEvent(new ReconnectionEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Host = endpoint,
+            EventType = ReconnectionEventType.ConnectionLost,
+            Message = "Node removed from cluster"
+        });
+    }
+
+    public void RecordHostDown(Host host)
+    {
+        var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
+        var previousState = _hostStates.GetValueOrDefault(endpoint, ConnectionState.Connected);
+        _hostStates[endpoint] = ConnectionState.Disconnected;
+        
+        RecordReconnectionEvent(new ReconnectionEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Host = endpoint,
+            EventType = ReconnectionEventType.ConnectionLost,
+            Message = $"Node marked DOWN by cluster"
+        });
+        
+        // Track reconnection info
+        _reconnectionInfo[endpoint] = new ReconnectionInfo
+        {
+            AttemptCount = 0,
+            LastAttempt = DateTime.UtcNow
+        };
+        
+        // Raise state change event
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs
+        {
+            Host = endpoint,
+            OldState = previousState,
+            NewState = ConnectionState.Disconnected
+        });
+    }
+
+    public void RecordHostUp(Host host)
+    {
+        var endpoint = new IPEndPoint(host.Address.Address, host.Address.Port);
+        var previousState = _hostStates.GetValueOrDefault(endpoint, ConnectionState.Disconnected);
+        _hostStates[endpoint] = ConnectionState.Connected;
+        
+        // Calculate downtime if we were tracking reconnection
+        TimeSpan? downtime = null;
+        if (_reconnectionInfo.TryRemove(endpoint, out var info))
+        {
+            downtime = DateTime.UtcNow - info.LastAttempt;
+        }
+        
+        RecordReconnectionEvent(new ReconnectionEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Host = endpoint,
+            EventType = ReconnectionEventType.ReconnectionSuccess,
+            Message = $"Node marked UP by cluster",
+            Duration = downtime
+        });
+        
+        // Raise state change event
+        ConnectionStateChanged?.Invoke(this, new ConnectionStateChangedEventArgs
+        {
+            Host = endpoint,
+            OldState = previousState,
+            NewState = ConnectionState.Connected
+        });
+    }
+
     private void RecordReconnectionEvent(ReconnectionEvent evt)
     {
         lock (_historyLock)
