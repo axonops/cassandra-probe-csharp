@@ -114,7 +114,7 @@ For comprehensive documentation, see the **[Documentation Index](docs/README.md)
 
 **Important**: The DataStax C# driver has significant limitations compared to the Java driver that affect failure detection and recovery:
 
-- **No HostUp/HostDown events** - The driver doesn't notify when nodes fail or recover
+- **No HostUp/HostDown events** - The driver doesn't notify when nodes fail or recover ([CSHARP-183](https://datastax-oss.atlassian.net/browse/CSHARP-183))
 - **No proactive failure detection** - Failed connections discovered only when used
 - **Poor recovery during rolling restarts** - Applications may not reconnect automatically
 - **Stale connection pools** - Dead connections remain until manually refreshed
@@ -124,7 +124,18 @@ These limitations can cause your C# applications to:
 - Experience timeouts instead of failover
 - Require manual intervention or restart to recover
 
-**[Read the detailed C# Driver Limitations guide](docs/CSHARP_DRIVER_LIMITATIONS.md)** for workarounds and solutions.
+### Documentation and References
+- **[Detailed C# Driver Limitations Guide](docs/CSHARP_DRIVER_LIMITATIONS.md)** - Comprehensive guide with workarounds
+- **[Resilient Client Implementation](docs/RESILIENT_CLIENT_IMPLEMENTATION.md)** - Production-ready solution
+- [DataStax JIRA: CSHARP-183](https://datastax-oss.atlassian.net/browse/CSHARP-183) - HostUp/HostDown events (open since 2014)
+- [Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations) - Official driver docs
+- [Driver Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver) - C# vs Java
+
+### Try the Resilient Client Demo
+```bash
+# See how to handle these limitations in production
+./cassandra-probe --contact-points cluster:9042 --resilient-client
+```
 
 ## 🧪 Testing Driver Reconnection
 

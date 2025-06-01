@@ -4,6 +4,13 @@
 
 The DataStax C# driver for Apache Cassandra has several limitations compared to the Java driver that can significantly impact connection management and cluster state awareness. These limitations are particularly problematic during rolling restarts and cluster-wide outages.
 
+**Official Documentation References:**
+- [JIRA: Add HostUp/HostDown events (CSHARP-183)](https://datastax-oss.atlassian.net/browse/CSHARP-183) - Open since 2014
+- [C# Driver Known Limitations](https://docs.datastax.com/en/developer/csharp-driver/latest/features/connection-pooling/#known-limitations)
+- [Driver Feature Comparison](https://docs.datastax.com/en/developer/csharp-driver/latest/faq/#how-does-the-c-driver-compare-to-the-java-driver)
+- [GitHub Issue #147](https://github.com/datastax/csharp-driver/issues/147) - Community discussion on missing events
+- [Stack Overflow: C# Driver Connection Issues](https://stackoverflow.com/questions/tagged/datastax-csharp-driver+connection)
+
 ## Missing Events in C# Driver
 
 ### Events Available in C# Driver (v3.x)
@@ -633,6 +640,23 @@ public class ResilientCassandraClient : IDisposable
         public bool IsUp { get; set; }
         public DateTime LastSeen { get; set; }
     }
+```
+
+## Production-Ready Implementation
+
+For a complete, production-tested implementation of all these workarounds, see the **[Resilient Client Implementation](RESILIENT_CLIENT_IMPLEMENTATION.md)** included in this project. The implementation provides:
+
+- Automatic host state monitoring with configurable intervals
+- Connection pool refresh to prevent stale connections  
+- Sophisticated retry policies with exponential backoff
+- Speculative execution for latency-sensitive queries
+- Comprehensive metrics and observability
+
+To see the resilient client in action and compare it with standard driver behavior:
+
+```bash
+# Run the resilience demonstration
+./cassandra-probe --contact-points node1,node2,node3 --resilient-client
 ```
 
 ## Testing Your Recovery Implementation
