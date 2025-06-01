@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Simple Resilient Client Test
-# This script demonstrates the resilient client without Docker
+# This script demonstrates the resilient client without requiring container management
 
 set -e
 

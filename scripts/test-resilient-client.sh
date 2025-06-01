@@ -19,6 +19,34 @@ CASSANDRA_VERSION="4.1"
 NUM_NODES=3
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# Detect container runtime (Docker or Podman)
+detect_container_runtime() {
+    if command -v docker &> /dev/null; then
+        if docker version &> /dev/null; then
+            echo "docker"
+            return
+        fi
+    fi
+    
+    if command -v podman &> /dev/null; then
+        if podman version &> /dev/null; then
+            echo "podman"
+            return
+        fi
+    fi
+    
+    echo "error"
+}
+
+# Set container runtime
+CONTAINER_RUNTIME=$(detect_container_runtime)
+if [ "$CONTAINER_RUNTIME" = "error" ]; then
+    echo "Error: Neither Docker nor Podman is available or running"
+    exit 1
+fi
+
+echo -e "${GREEN}Using container runtime: $CONTAINER_RUNTIME${NC}"
+
 # Function to print colored output
 log() {
     local color=$1
@@ -29,7 +57,7 @@ log() {
 # Function to check if container is running
 is_container_running() {
     local container=$1
-    docker ps --format "table {{.Names}}" | grep -q "^${container}$"
+    $CONTAINER_RUNTIME ps --format "table {{.Names}}" | grep -q "^${container}$"
 }
 
 # Function to wait for Cassandra node to be ready
@@ -41,7 +69,7 @@ wait_for_cassandra() {
     log $YELLOW "Waiting for $container to be ready..."
     
     while [ $attempt -le $max_attempts ]; do
-        if docker exec $container cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
+        if $CONTAINER_RUNTIME exec $container cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
             log $GREEN "$container is ready!"
             return 0
         fi
@@ -58,7 +86,7 @@ wait_for_cassandra() {
 # Function to create test schema
 create_test_schema() {
     log $BLUE "Creating test keyspace and table..."
-    docker exec cassandra-node-1 cqlsh -e "
+    $CONTAINER_RUNTIME exec cassandra-node-1 cqlsh -e "
         CREATE KEYSPACE IF NOT EXISTS resilient_test 
         WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};
         
@@ -76,11 +104,11 @@ start_cluster() {
     log $BLUE "Starting Cassandra cluster with $NUM_NODES nodes..."
     
     # Create network if it doesn't exist
-    docker network create $NETWORK_NAME 2>/dev/null || true
+    $CONTAINER_RUNTIME network create $NETWORK_NAME 2>/dev/null || true
     
     # Start first node
     log $YELLOW "Starting cassandra-node-1 (seed node)..."
-    docker run -d \
+    $CONTAINER_RUNTIME run -d \
         --name cassandra-node-1 \
         --network $NETWORK_NAME \
         -p 9042:9042 \
@@ -94,7 +122,7 @@ start_cluster() {
     # Start additional nodes
     for i in $(seq 2 $NUM_NODES); do
         log $YELLOW "Starting cassandra-node-$i..."
-        docker run -d \
+        $CONTAINER_RUNTIME run -d \
             --name cassandra-node-$i \
             --network $NETWORK_NAME \
             -e CASSANDRA_SEEDS=cassandra-node-1 \
@@ -112,7 +140,7 @@ start_cluster() {
     
     # Show cluster status
     log $GREEN "Cluster status:"
-    docker exec cassandra-node-1 nodetool status
+    $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status
 }
 
 # Function to stop cluster
@@ -120,11 +148,11 @@ stop_cluster() {
     log $BLUE "Stopping Cassandra cluster..."
     
     for i in $(seq 1 $NUM_NODES); do
-        docker stop cassandra-node-$i 2>/dev/null || true
-        docker rm cassandra-node-$i 2>/dev/null || true
+        $CONTAINER_RUNTIME stop cassandra-node-$i 2>/dev/null || true
+        $CONTAINER_RUNTIME rm cassandra-node-$i 2>/dev/null || true
     done
     
-    docker network rm $NETWORK_NAME 2>/dev/null || true
+    $CONTAINER_RUNTIME network rm $NETWORK_NAME 2>/dev/null || true
 }
 
 # Function to run the probe with resilient client
@@ -161,13 +189,13 @@ rolling_restart() {
     
     for i in $(seq 1 $NUM_NODES); do
         log $YELLOW "Stopping cassandra-node-$i..."
-        docker stop cassandra-node-$i
+        $CONTAINER_RUNTIME stop cassandra-node-$i
         
         log $YELLOW "Waiting 10 seconds..."
         sleep 10
         
         log $YELLOW "Starting cassandra-node-$i..."
-        docker start cassandra-node-$i
+        $CONTAINER_RUNTIME start cassandra-node-$i
         
         wait_for_cassandra "cassandra-node-$i"
         
@@ -189,12 +217,12 @@ simulate_node_failure() {
     local duration=${2:-30}
     
     log $RED "Simulating failure of cassandra-node-$node_num for ${duration}s..."
-    docker pause cassandra-node-$node_num
+    $CONTAINER_RUNTIME pause cassandra-node-$node_num
     
     sleep $duration
     
     log $GREEN "Recovering cassandra-node-$node_num..."
-    docker unpause cassandra-node-$node_num
+    $CONTAINER_RUNTIME unpause cassandra-node-$node_num
 }
 
 # Function to run comparison test
@@ -202,8 +230,9 @@ run_comparison_test() {
     log $BLUE "Running comparison test: Standard vs Resilient client..."
     
     # Create a simple test script
-    cat > /tmp/cassandra_probe_test.sh << 'EOF'
+    cat > /tmp/cassandra_probe_test.sh << EOF
 #!/bin/bash
+CONTAINER_RUNTIME="$CONTAINER_RUNTIME"
 echo "=== STANDARD CLIENT TEST ==="
 echo "Running queries with standard client during node failure..."
 
@@ -214,32 +243,32 @@ echo "=== RESILIENT CLIENT TEST ==="
 echo "Running queries with resilient client during node failure..."
 
 # Run resilient probe
-dotnet run --project src/CassandraProbe.Cli -- \
-    --contact-points "cassandra-node-1:9042,cassandra-node-2:9042,cassandra-node-3:9042" \
-    --resilient-client \
-    --test-cql "INSERT INTO resilient_test.test_data (id, timestamp, value, client_type) VALUES (uuid(), toTimestamp(now()), 'test', 'resilient')" \
-    -i 2 \
+dotnet run --project src/CassandraProbe.Cli -- \\
+    --contact-points "cassandra-node-1:9042,cassandra-node-2:9042,cassandra-node-3:9042" \\
+    --resilient-client \\
+    --test-cql "INSERT INTO resilient_test.test_data (id, timestamp, value, client_type) VALUES (uuid(), toTimestamp(now()), 'test', 'resilient')" \\
+    -i 2 \\
     --log-level Information &
 
-PROBE_PID=$!
+PROBE_PID=\$!
 
 # Let it run for a bit
 sleep 10
 
 # Simulate node failure
-docker stop cassandra-node-2
+\$CONTAINER_RUNTIME stop cassandra-node-2
 
 # Run for 30 seconds with node down
 sleep 30
 
 # Bring node back
-docker start cassandra-node-2
+\$CONTAINER_RUNTIME start cassandra-node-2
 
 # Run for another 20 seconds
 sleep 20
 
 # Stop the probe
-kill $PROBE_PID 2>/dev/null || true
+kill \$PROBE_PID 2>/dev/null || true
 
 echo "Test completed!"
 EOF
@@ -254,7 +283,7 @@ EOF
 show_logs() {
     local lines=${1:-50}
     log $BLUE "Showing last $lines lines of cassandra-node-1 logs:"
-    docker logs --tail $lines cassandra-node-1
+    $CONTAINER_RUNTIME logs --tail $lines cassandra-node-1
 }
 
 # Main menu
@@ -303,7 +332,7 @@ run_full_test() {
     
     # Show final cluster status
     log $GREEN "Final cluster status:"
-    docker exec cassandra-node-1 nodetool status
+    $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status
     
     log $GREEN "Full test suite completed!"
 }
@@ -362,7 +391,7 @@ while true; do
             run_comparison_test
             ;;
         7)
-            docker exec cassandra-node-1 nodetool status 2>/dev/null || log $RED "Cluster not running"
+            $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status 2>/dev/null || log $RED "Cluster not running"
             ;;
         8)
             echo -n "How many lines? "

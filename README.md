@@ -131,6 +131,22 @@ While the root cause of these behaviors isn't fully clear, we've developed a res
 ./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
+### Interactive Demos (Docker/Podman)
+We provide comprehensive demo scripts that work with both Docker and Podman:
+
+```bash
+# Quick verification of resilient client
+./scripts/verify-resilient-client.sh
+
+# Full interactive demo with 3-node cluster
+./scripts/demo-resilient-client.sh
+
+# Automated test scenarios
+./scripts/test-resilient-client.sh
+```
+
+See [Demo Scripts Documentation](scripts/README.md) for details.
+
 ## 🧪 Testing Driver Reconnection
 
 One of the most valuable uses of Cassandra Probe is testing how your applications handle node failures:

@@ -20,6 +20,42 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOG_DIR="$PROJECT_ROOT/logs/resilient-client-demo"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yml"
 
+# Detect container runtime (Docker or Podman)
+detect_container_runtime() {
+    if command -v docker &> /dev/null; then
+        if docker version &> /dev/null; then
+            echo "docker"
+            return
+        fi
+    fi
+    
+    if command -v podman &> /dev/null; then
+        if podman version &> /dev/null; then
+            echo "podman"
+            return
+        fi
+    fi
+    
+    echo "error"
+}
+
+# Set container runtime
+CONTAINER_RUNTIME=$(detect_container_runtime)
+if [ "$CONTAINER_RUNTIME" = "error" ]; then
+    echo "Error: Neither Docker nor Podman is available or running"
+    exit 1
+fi
+
+# Set compose command based on runtime
+if [ "$CONTAINER_RUNTIME" = "podman" ]; then
+    COMPOSE_CMD="podman-compose"
+else
+    COMPOSE_CMD="docker-compose"
+fi
+
+echo -e "${GREEN}Using container runtime: $CONTAINER_RUNTIME${NC}"
+echo -e "${GREEN}Using compose command: $COMPOSE_CMD${NC}"
+
 # Logging functions
 log() {
     local color=$1
@@ -49,7 +85,7 @@ setup() {
     
     # Start Cassandra cluster
     log $BLUE "Starting 3-node Cassandra cluster..."
-    docker-compose -f "$COMPOSE_FILE" up -d
+    $COMPOSE_CMD -f "$COMPOSE_FILE" up -d
     
     # Wait for cluster to be ready
     log $YELLOW "Waiting for cluster to be ready (this may take 2-3 minutes)..."
@@ -57,7 +93,7 @@ setup() {
     local attempt=1
     
     while [ $attempt -le $max_attempts ]; do
-        if docker exec cassandra-node-1 cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
+        if $CONTAINER_RUNTIME exec cassandra-node-1 cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
             break
         fi
         echo -n "."
@@ -74,7 +110,7 @@ setup() {
     # Wait for all nodes to join
     log $YELLOW "Waiting for all nodes to join cluster..."
     while true; do
-        local up_nodes=$(docker exec cassandra-node-1 nodetool status | grep "^UN" | wc -l)
+        local up_nodes=$($CONTAINER_RUNTIME exec cassandra-node-1 nodetool status | grep "^UN" | wc -l)
         if [ "$up_nodes" -eq "3" ]; then
             break
         fi
@@ -82,11 +118,11 @@ setup() {
     done
     
     log $GREEN "Cluster is ready!"
-    docker exec cassandra-node-1 nodetool status
+    $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status
     
     # Create test schema
     log $BLUE "Creating test keyspace and table..."
-    docker exec cassandra-node-1 cqlsh -e "
+    $CONTAINER_RUNTIME exec cassandra-node-1 cqlsh -e "
         CREATE KEYSPACE IF NOT EXISTS probe_test 
         WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 3};
         
@@ -105,7 +141,7 @@ cleanup() {
     header "Cleaning up"
     
     log $BLUE "Stopping Cassandra cluster..."
-    docker-compose -f "$COMPOSE_FILE" down -v
+    $COMPOSE_CMD -f "$COMPOSE_FILE" down -v
     
     log $GREEN "Cleanup completed!"
 }
@@ -162,14 +198,14 @@ demo_single_node_failure() {
     
     # Stop node 2
     log $RED "STOPPING cassandra-node-2..."
-    docker-compose -f "$COMPOSE_FILE" stop cassandra-node-2
+    $COMPOSE_CMD -f "$COMPOSE_FILE" stop cassandra-node-2
     
     log $YELLOW "Node 2 is DOWN - observing client behavior for 30 seconds..."
     sleep 30
     
     # Restart node 2
     log $GREEN "STARTING cassandra-node-2..."
-    docker-compose -f "$COMPOSE_FILE" start cassandra-node-2
+    $COMPOSE_CMD -f "$COMPOSE_FILE" start cassandra-node-2
     
     log $YELLOW "Node 2 is RECOVERING - observing recovery for 30 seconds..."
     sleep 30
@@ -213,13 +249,13 @@ demo_rolling_restart() {
     # Rolling restart
     for node in "cassandra-node-1" "cassandra-node-2" "cassandra-node-3"; do
         log $YELLOW "Restarting $node..."
-        docker-compose -f "$COMPOSE_FILE" restart $node
+        $COMPOSE_CMD -f "$COMPOSE_FILE" restart $node
         
         log $YELLOW "Waiting for $node to rejoin (40 seconds)..."
         sleep 40
         
         # Show current cluster state
-        docker exec cassandra-node-1 nodetool status 2>/dev/null || docker exec cassandra-node-2 nodetool status 2>/dev/null || true
+        $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status 2>/dev/null || $CONTAINER_RUNTIME exec cassandra-node-2 nodetool status 2>/dev/null || true
     done
     
     log $GREEN "Rolling restart completed, observing recovery for 30 seconds..."
@@ -269,21 +305,21 @@ demo_cluster_outage() {
     
     # Stop entire cluster
     log $RED "STOPPING ENTIRE CLUSTER..."
-    docker-compose -f "$COMPOSE_FILE" stop
+    $COMPOSE_CMD -f "$COMPOSE_FILE" stop
     
     log $YELLOW "Cluster is DOWN - observing behavior for 30 seconds..."
     sleep 30
     
     # Restart cluster
     log $GREEN "STARTING CLUSTER..."
-    docker-compose -f "$COMPOSE_FILE" start
+    $COMPOSE_CMD -f "$COMPOSE_FILE" start
     
     log $YELLOW "Cluster is RECOVERING - waiting for recovery..."
     
     # Wait for at least one node
     local attempt=1
     while [ $attempt -le 60 ]; do
-        if docker exec cassandra-node-1 cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
+        if $CONTAINER_RUNTIME exec cassandra-node-1 cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
             log $GREEN "Cluster is responding!"
             break
         fi
@@ -366,7 +402,7 @@ main_menu() {
             3) demo_rolling_restart ;;
             4) demo_cluster_outage ;;
             5) show_realtime_comparison ;;
-            6) docker exec cassandra-node-1 nodetool status ;;
+            6) $CONTAINER_RUNTIME exec cassandra-node-1 nodetool status ;;
             7) cleanup ;;
             8) 
                 setup
