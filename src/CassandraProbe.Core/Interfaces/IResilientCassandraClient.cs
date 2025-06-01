@@ -3,7 +3,7 @@ using Cassandra;
 namespace CassandraProbe.Core.Interfaces;
 
 /// <summary>
-/// Interface for a resilient Cassandra client that handles C# driver limitations
+/// Interface for a resilient Cassandra client with enhanced connection recovery
 /// </summary>
 public interface IResilientCassandraClient : IDisposable
 {

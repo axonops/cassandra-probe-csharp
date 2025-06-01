@@ -15,7 +15,7 @@ Welcome to the Cassandra Probe documentation. This directory contains comprehens
 - **[Features](FEATURES.md)** - Detailed feature descriptions and capabilities
 - **[Cassandra Compatibility](CASSANDRA-COMPATIBILITY.md)** - Version requirements and compatibility
 - **[Cluster Events](CLUSTER_EVENTS.md)** - Cluster monitoring and event handling
-- **[C# Driver Limitations](CSHARP_DRIVER_LIMITATIONS.md)** - Critical limitations vs Java driver
+- **[C# Driver Observations](CSHARP_DRIVER_OBSERVATIONS.md)** - Connection recovery behaviors we've observed
 - **[Resilient Client Implementation](RESILIENT_CLIENT_IMPLEMENTATION.md)** - Production-ready resilient client implementation
 
 ## 👩‍💻 Developer Documentation

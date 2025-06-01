@@ -68,7 +68,7 @@ Expand-Archive cassandra-probe-*.zip
 # Test specific CQL query
 ./cassandra-probe --contact-points cluster:9042 --test-cql "SELECT * FROM system.local"
 
-# Run resilient client demonstration (shows how to handle C# driver limitations)
+# Run resilient client demonstration (shows enhanced recovery approach)
 ./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
@@ -121,7 +121,7 @@ In our testing with the DataStax C# driver, we've observed some scenarios where 
 While the root cause of these behaviors isn't fully clear, we've developed a resilient client implementation that has helped improve recovery in our use cases.
 
 ### Additional Resources
-- **[Our Observations & Workarounds](docs/CSHARP_DRIVER_LIMITATIONS.md)** - What we've seen and how we handle it
+- **[Our Observations & Workarounds](docs/CSHARP_DRIVER_OBSERVATIONS.md)** - What we've seen and how we handle it
 - **[Resilient Client Implementation](docs/RESILIENT_CLIENT_IMPLEMENTATION.md)** - Our approach to improving recovery
 - [Official Driver Documentation](https://docs.datastax.com/en/developer/csharp-driver/latest/)
 

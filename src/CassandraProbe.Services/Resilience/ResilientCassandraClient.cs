@@ -12,7 +12,7 @@ using Polly.CircuitBreaker;
 namespace CassandraProbe.Services.Resilience;
 
 /// <summary>
-/// Production-grade resilient Cassandra client that handles C# driver limitations.
+/// Production-grade resilient Cassandra client with enhanced connection recovery.
 /// Provides automatic failure detection, transparent recovery, and comprehensive monitoring.
 /// </summary>
 public class ResilientCassandraClient : IResilientCassandraClient, IDisposable

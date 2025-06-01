@@ -287,7 +287,7 @@ If you're experiencing persistent issues with direct driver connections, conside
 
 ## Example: Complete Recovery Solution
 
-This example combines all the workarounds into a production-ready client that handles the C# driver's limitations. It provides the resilience that the driver lacks out of the box.
+This example combines all the workarounds into a production-ready client that addresses the recovery behaviors we've observed.
 
 **Key features of this solution:**
 - **Host monitoring**: Polls every 5 seconds to detect state changes
@@ -665,6 +665,6 @@ Use Cassandra Probe to validate your workarounds:
 - Error rate: Are queries failing or being rerouted successfully?
 - Connection pool state: Are stale connections being refreshed?
 
-## Conclusion
+## Summary
 
-The C# driver's lack of HostUp/HostDown events is a fundamental limitation that requires application-level workarounds. This is not a bug but a design limitation of the driver. For mission-critical applications that require robust failure handling, you must implement additional monitoring and recovery logic on top of the driver.
+Based on our observations, the C# driver behaves differently than expected during cluster topology changes. The absence of accessible host state change events appears to contribute to recovery challenges. While we can't definitively explain why these behaviors occur, implementing additional monitoring and recovery logic has improved reliability in our applications.

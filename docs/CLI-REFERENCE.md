@@ -93,7 +93,7 @@ cassandra-probe schedule [schedule-options]
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--resilient-client` | - | Use resilient client that handles C# driver limitations | false |
+| `--resilient-client` | - | Use resilient client with enhanced connection recovery | false |
 
 ## Examples
 

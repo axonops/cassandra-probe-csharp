@@ -120,7 +120,7 @@ public class CommandLineOptions
     public string? MetricsExportFormat { get; set; }
 
     // Resilience Options
-    [Option("resilient-client", HelpText = "Use resilient client that handles C# driver limitations")]
+    [Option("resilient-client", HelpText = "Use resilient client with enhanced connection recovery")]
     public bool UseResilientClient { get; set; }
 
     // Other Options
