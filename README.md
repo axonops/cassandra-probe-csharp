@@ -98,15 +98,14 @@ The primary purpose of Cassandra Probe is to validate Cassandra driver behavior 
 
 ## 📖 Documentation
 
-- [**User Guide**](docs/USER-GUIDE.md) - Comprehensive usage instructions
+For comprehensive documentation, see the **[Documentation Index](docs/README.md)**.
+
+### Quick Links
+- [**User Guide**](docs/USER-GUIDE.md) - Getting started and common usage patterns
 - [**CLI Reference**](docs/CLI-REFERENCE.md) - All command-line options
 - [**Configuration**](docs/CONFIGURATION.md) - YAML configuration examples
 - [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
-
-### For Developers
-- [**Building from Source**](docs/BUILD.md) - Build instructions for all platforms
-- [**Architecture**](docs/ARCHITECTURE.md) - System design and components
-- [**Contributing**](docs/CONTRIBUTING.md) - How to contribute to the project
+- [**Building from Source**](docs/BUILD.md) - Build instructions for developers
 
 ## 🧪 Testing Driver Reconnection
 
