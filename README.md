@@ -107,6 +107,22 @@ For comprehensive documentation, see the **[Documentation Index](docs/README.md)
 - [**Troubleshooting**](docs/TROUBLESHOOTING.md) - Common issues and solutions
 - [**Building from Source**](docs/BUILD.md) - Build instructions for developers
 
+## ⚠️ C# Driver Limitations
+
+**Important**: The DataStax C# driver has significant limitations compared to the Java driver that affect failure detection and recovery:
+
+- **No HostUp/HostDown events** - The driver doesn't notify when nodes fail or recover
+- **No proactive failure detection** - Failed connections discovered only when used
+- **Poor recovery during rolling restarts** - Applications may not reconnect automatically
+- **Stale connection pools** - Dead connections remain until manually refreshed
+
+These limitations can cause your C# applications to:
+- Continue using failed connections
+- Experience timeouts instead of failover
+- Require manual intervention or restart to recover
+
+**[Read the detailed C# Driver Limitations guide](docs/CSHARP_DRIVER_LIMITATIONS.md)** for workarounds and solutions.
+
 ## 🧪 Testing Driver Reconnection
 
 One of the most valuable uses of Cassandra Probe is testing how your applications handle node failures:
