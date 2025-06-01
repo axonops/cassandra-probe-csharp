@@ -55,25 +55,27 @@ Timeline of a typical rolling restart problem:
 Your application likely experiences these issues:
 
 ### 1. Stale Connection Pool
-```csharp
-// The C# driver maintains connections but doesn't actively monitor their health
-// Dead connections remain in the pool until used
-// No background health checking of idle connections
-```
+
+The C# driver maintains connections but doesn't actively monitor their health. This leads to:
+- Dead connections remaining in the pool until they're actually used
+- No background health checking of idle connections
+- Failed requests when the application tries to use these stale connections
 
 ### 2. No Proactive Failover
-```csharp
-// Without HostDown events, the driver doesn't know to avoid a node
-// Requests continue being sent to down nodes until they timeout
-// This causes unnecessary latency and errors
-```
+
+Without HostDown events, the driver doesn't know to avoid a failed node:
+- Requests continue being sent to down nodes until they timeout
+- Each failed request experiences the full timeout delay
+- This causes unnecessary latency and cascading errors
+- No automatic rerouting to healthy nodes
 
 ### 3. Incomplete Recovery
-```csharp
-// Without HostUp events, the driver doesn't know when to reconnect
-// Nodes that come back online may not receive traffic
-// Manual intervention or application restart may be required
-```
+
+Without HostUp events, the driver doesn't know when nodes recover:
+- Nodes that come back online may not receive traffic
+- Load remains unbalanced even after recovery
+- Manual intervention or application restart may be required
+- Connection pools don't automatically refresh to include recovered nodes
 
 ## Workarounds and Solutions
 
