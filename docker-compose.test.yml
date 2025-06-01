@@ -1,0 +1,80 @@
+services:
+  cassandra-node-1:
+    image: cassandra:4.1
+    container_name: cassandra-node-1
+    ports:
+      - "19042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_NUM_TOKENS=256
+    networks:
+      - cassandra-net
+    volumes:
+      - cassandra1-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+  cassandra-node-2:
+    image: cassandra:4.1
+    container_name: cassandra-node-2
+    ports:
+      - "9043:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-node-1
+      - CASSANDRA_NUM_TOKENS=256
+    networks:
+      - cassandra-net
+    volumes:
+      - cassandra2-data:/var/lib/cassandra
+    depends_on:
+      cassandra-node-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+  cassandra-node-3:
+    image: cassandra:4.1
+    container_name: cassandra-node-3
+    ports:
+      - "9044:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TestCluster
+      - CASSANDRA_DC=dc1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - CASSANDRA_SEEDS=cassandra-node-1
+      - CASSANDRA_NUM_TOKENS=256
+    networks:
+      - cassandra-net
+    volumes:
+      - cassandra3-data:/var/lib/cassandra
+    depends_on:
+      cassandra-node-1:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+networks:
+  cassandra-net:
+    driver: bridge
+
+volumes:
+  cassandra1-data:
+  cassandra2-data:
+  cassandra3-data:
