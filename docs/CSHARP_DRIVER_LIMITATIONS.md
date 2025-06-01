@@ -276,22 +276,14 @@ public class CassandraCircuitBreaker
 }
 ```
 
-## Java Driver Advantages
+## Alternative Approaches
 
-The Java driver handles these scenarios better because:
+If you're experiencing persistent issues with direct driver connections, consider:
 
-1. **Active health checking** - Background threads monitor connection health
-2. **Event-driven architecture** - Immediate notification of state changes
-3. **Sophisticated retry logic** - Built-in speculative execution and retry policies
-4. **Connection pool management** - Proactive connection refresh and validation
-
-## Recommendations
-
-1. **Don't rely on the C# driver's automatic recovery** - It's insufficient for production use
-2. **Implement custom monitoring** - Poll host states and manage your own recovery logic
-3. **Use aggressive timeouts** - Fail fast to detect issues quickly
-4. **Consider the Java driver** - If your application is mission-critical
-5. **Test failure scenarios** - Use Cassandra Probe to validate your recovery logic
+1. **Implement custom monitoring** - Like our resilient client approach
+2. **Use a proxy layer** - Some teams have success with connection pooling proxies
+3. **HTTP-based APIs** - REST or GraphQL interfaces can provide more stable connections
+4. **Test thoroughly** - Use tools like Cassandra Probe to understand your specific failure patterns
 
 ## Example: Complete Recovery Solution
 
