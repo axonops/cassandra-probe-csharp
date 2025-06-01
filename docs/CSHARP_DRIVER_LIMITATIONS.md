@@ -307,10 +307,22 @@ This example combines all the workarounds into a production-ready client that ha
 **Usage pattern:**
 ```csharp
 // Create resilient client once at application startup
-var client = new ResilientCassandraClient(new[] { "node1", "node2", "node3" });
+var client = new ResilientCassandraClient(new[] { "node1", "node2", "node3" }, logger);
 
-// Use it throughout your application
-var result = await client.ExecuteAsync("SELECT * FROM my_table WHERE id = ?", id);
+// SAFE: SELECT queries are always idempotent
+var result = await client.ExecuteSelectAsync("SELECT * FROM my_table WHERE id = ?", id);
+
+// SAFE: UPDATE that sets specific values (not incrementing)
+await client.ExecuteWriteAsync(
+    "UPDATE users SET email = ? WHERE id = ?", 
+    isIdempotent: true,  // Safe - overwrites with specific value
+    email, userId);
+
+// UNSAFE: Never mark counter updates as idempotent
+await client.ExecuteWriteAsync(
+    "UPDATE counters SET views = views + 1 WHERE page_id = ?", 
+    isIdempotent: false,  // Would double-count on retry!
+    pageId);
 ```
 
 **Complete implementation:**
@@ -366,9 +378,9 @@ public class ResilientCassandraClient : IDisposable
                 // Options: ONE (fastest), QUORUM, ALL (strongest), LOCAL_ONE, LOCAL_QUORUM
                 .SetConsistencyLevel(ConsistencyLevel.LocalQuorum)
                 
-                // Idempotence: Marks queries safe to retry/speculate
-                // Critical for automatic retries and speculative execution
-                .SetDefaultIdempotence(true)
+                // WARNING: DO NOT SET DEFAULT IDEMPOTENCE TO TRUE!
+                // .SetDefaultIdempotence(true) // DANGEROUS - assumes all queries are idempotent
+                // Instead, set idempotence per query to enable retries and speculation safely
                 
                 // Optional: Set default timeout per query (overrides socket timeout)
                 .SetDefaultTimeout(5000))
@@ -392,7 +404,8 @@ public class ResilientCassandraClient : IDisposable
             // ConstantSpeculativeExecutionPolicy: Fixed delay before speculation
             // - delay: 200ms - If no response in 200ms, try another node
             // - maxSpeculativeExecutions: 2 - Try up to 2 additional nodes
-            // Only use with idempotent queries!
+            // CRITICAL: Only works for queries marked as idempotent!
+            // Without SetIdempotence(true) on a query, speculation is disabled
             .WithSpeculativeExecutionPolicy(
                 new ConstantSpeculativeExecutionPolicy(
                     delay: 200,  // p99 latency is a good value here
@@ -526,24 +539,69 @@ public class ResilientCassandraClient : IDisposable
         }
     }
     
-    // Execute queries with automatic failover and retry logic
+    // Execute queries - MUST specify idempotence per query type
     public async Task<RowSet> ExecuteAsync(string cql, params object[] values)
     {
-        var statement = new SimpleStatement(cql, values)
-            .SetIdempotence(true);  // Enable retries and speculation
+        var statement = new SimpleStatement(cql, values);
+        // DO NOT set idempotence here - let caller decide based on query type
         
         return await _session.ExecuteAsync(statement);
     }
     
-    // Execute with custom consistency level
-    public async Task<RowSet> ExecuteAsync(string cql, ConsistencyLevel consistency, params object[] values)
+    // Execute SELECT query - safe to mark as idempotent
+    public async Task<RowSet> ExecuteSelectAsync(string cql, params object[] values)
     {
         var statement = new SimpleStatement(cql, values)
-            .SetIdempotence(true)
-            .SetConsistencyLevel(consistency);
+            .SetIdempotence(true);  // SELECT queries are always idempotent
         
         return await _session.ExecuteAsync(statement);
     }
+    
+    // Execute INSERT/UPDATE with idempotence decision
+    public async Task<RowSet> ExecuteWriteAsync(string cql, bool isIdempotent, params object[] values)
+    {
+        var statement = new SimpleStatement(cql, values)
+            .SetIdempotence(isIdempotent);  // Caller must determine safety
+        
+        return await _session.ExecuteAsync(statement);
+    }
+    
+    /* IDEMPOTENCE GUIDELINES:
+     * 
+     * ALWAYS IDEMPOTENT (safe to retry/speculate):
+     * - SELECT queries
+     * - INSERT with IF NOT EXISTS
+     * - UPDATE with specific primary key (no counters, no collections with +=/-=)
+     * - DELETE with specific primary key
+     * 
+     * NEVER IDEMPOTENT (unsafe to retry):
+     * - Counter updates (counter = counter + 1)
+     * - List append/prepend operations (list = list + ['item'])
+     * - INSERT without IF NOT EXISTS (could create duplicates)
+     * - Any query using non-deterministic functions (now(), uuid())
+     * 
+     * EXAMPLE USAGE:
+     * // Safe - SELECT is always idempotent
+     * var users = await client.ExecuteSelectAsync("SELECT * FROM users WHERE id = ?", userId);
+     * 
+     * // Safe - UPDATE with specific key, no counters
+     * await client.ExecuteWriteAsync(
+     *     "UPDATE users SET name = ? WHERE id = ?", 
+     *     isIdempotent: true,  // Safe because it sets specific value
+     *     name, userId);
+     * 
+     * // UNSAFE - Counter update
+     * await client.ExecuteWriteAsync(
+     *     "UPDATE stats SET views = views + 1 WHERE id = ?", 
+     *     isIdempotent: false,  // NOT safe - would double-count on retry
+     *     statId);
+     * 
+     * // UNSAFE - List append
+     * await client.ExecuteWriteAsync(
+     *     "UPDATE events SET log = log + ? WHERE id = ?", 
+     *     isIdempotent: false,  // NOT safe - would append multiple times
+     *     newEvent, eventId);
+     */
     
     // Override these methods with your application-specific logic
     protected virtual void OnHostDown(Host host)
