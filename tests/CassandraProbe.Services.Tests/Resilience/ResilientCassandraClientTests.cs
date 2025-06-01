@@ -87,7 +87,7 @@ public class ResilientCassandraClientTests : IDisposable
 
         // Assert
         Assert.Contains(_logMessages, msg => 
-            msg.Contains("10s") && msg.Contains("120s"));
+            msg.Contains("host monitoring every 10") && msg.Contains("connection refresh every 120"));
     }
 
     [Fact]
