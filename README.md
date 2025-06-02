@@ -132,6 +132,8 @@ To address these challenges, we've implemented a production-grade resilient clie
 ./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
+📚 **[Resilient Client Quick Start Guide](RESILIENT_CLIENT_QUICKSTART.md)** - Get started testing the resilient client in minutes
+
 ### Interactive Demos (Docker/Podman)
 We provide comprehensive demo scripts that work with both Docker and Podman:
 
