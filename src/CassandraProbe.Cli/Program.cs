@@ -174,7 +174,7 @@ class Program
 
         logger.LogInformation("Probe scheduled. Press Ctrl+C to stop...");
 
-        // Wait for cancellation
+        // Wait for cancellation or duration expiry
         var cts = new CancellationTokenSource();
         Console.CancelKeyPress += (s, e) =>
         {
@@ -182,13 +182,27 @@ class Program
             cts.Cancel();
         };
 
+        // If duration is specified, set a timeout
+        if (config.Scheduling.DurationMinutes.HasValue)
+        {
+            var durationMs = config.Scheduling.DurationMinutes.Value * 60 * 1000;
+            cts.CancelAfter(durationMs);
+        }
+
         try
         {
             await Task.Delay(Timeout.Infinite, cts.Token);
         }
         catch (OperationCanceledException)
         {
-            logger.LogInformation("Stopping scheduled probes...");
+            if (config.Scheduling.DurationMinutes.HasValue)
+            {
+                logger.LogInformation("Probe duration of {Duration} minutes completed", config.Scheduling.DurationMinutes.Value);
+            }
+            else
+            {
+                logger.LogInformation("Stopping scheduled probes...");
+            }
         }
 
         await scheduler.StopAsync();

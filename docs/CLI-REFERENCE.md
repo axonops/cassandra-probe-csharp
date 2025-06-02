@@ -64,7 +64,7 @@ cassandra-probe schedule [schedule-options]
 |--------|-------|-------------|---------|
 | `--interval` | `-i` | Seconds between probe executions | - |
 | `--cron` | - | Cron expression for scheduling | - |
-| `--duration` | `-d` | Total duration to run (minutes) | - |
+| `--duration` | `-d` | Total duration to run (minutes) - app exits after this time | - |
 | `--max-runs` | - | Maximum number of probe runs | - |
 
 ### Logging Options
