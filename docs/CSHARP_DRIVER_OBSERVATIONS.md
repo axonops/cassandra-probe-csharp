@@ -668,3 +668,8 @@ Use Cassandra Probe to validate your workarounds:
 ## Summary
 
 Based on our observations, the C# driver behaves differently than expected during cluster topology changes. The absence of accessible host state change events appears to contribute to recovery challenges. While we can't definitively explain why these behaviors occur, implementing additional monitoring and recovery logic has improved reliability in our applications.
+
+## Recent Driver Changes
+
+### Multi-Datacenter Failover (v3.x+)
+The C# driver has deprecated automatic DC failover functionality. The `usedHostsPerRemoteDc` parameter in `DCAwareRoundRobinPolicy` is now obsolete and will be removed in future versions. Applications must now implement their own DC failover logic based on their specific requirements. This change reflects the driver team's position that DC failover decisions require application context that the driver cannot provide.

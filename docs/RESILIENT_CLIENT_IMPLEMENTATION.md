@@ -55,15 +55,16 @@ HalfOpen → Test recovery with limited requests
 
 ### 3. ✅ Multi-Datacenter Support and Monitoring
 
-Enhanced multi-DC configuration with per-DC health tracking:
+Enhanced multi-DC configuration with per-DC health tracking.
+
+**Note**: As of the latest C# driver versions, DC failover should be handled at the application level rather than in the driver. The driver will connect to the specified local datacenter, and failover logic should be implemented in your application code.
 
 ```csharp
-var options = new ImprovedResilientClientOptions
+var options = new ResilientClientOptions
 {
     MultiDC = new MultiDCConfiguration
     {
         LocalDatacenter = "us-east-1",
-        UsedHostsPerRemoteDc = 2,
         AllowRemoteDCsForLocalConsistencyLevel = false
     }
 };
@@ -86,21 +87,34 @@ The client automatically adjusts behavior based on cluster health:
 public enum OperationMode
 {
     Normal,     // All operations allowed
-    Degraded,   // Reduced consistency for availability
+    Degraded,   // Cluster is degraded but operations continue
     ReadOnly,   // Only SELECT queries allowed  
     Emergency   // No queries allowed
 }
+```
 
-// Automatic consistency adjustment in degraded mode
-if (mode == OperationMode.Degraded)
+**Important Note:** The client no longer automatically modifies consistency levels. If you need consistency level adjustments during degraded states, implement a custom retry policy:
+
+```csharp
+// Example custom retry policy for consistency level downgrade
+public class ConsistencyDowngradeRetryPolicy : IRetryPolicy
 {
-    statement.SetConsistencyLevel(ConsistencyLevel.One);
+    public RetryDecision OnReadTimeout(IStatement query, ConsistencyLevel cl, 
+        int requiredResponses, int receivedResponses, bool dataRetrieved, int nbRetry)
+    {
+        if (nbRetry == 0 && cl > ConsistencyLevel.One)
+        {
+            return RetryDecision.Retry(ConsistencyLevel.One);
+        }
+        return RetryDecision.Rethrow();
+    }
+    // ... implement other methods
 }
 ```
 
 **Benefits:**
 - Maintains availability during partial outages
-- Prevents data inconsistency in severe failures
+- Gives applications full control over consistency levels
 - Clear operational state visibility
 
 ### 5. ✅ Aggressive Connection Recovery
@@ -133,9 +147,9 @@ private async Task AggressiveConnectionRefresh(Host host)
 services.AddSingleton<IResilientCassandraClient>(provider =>
 {
     var configuration = provider.GetRequiredService<ProbeConfiguration>();
-    var logger = provider.GetRequiredService<ILogger<ImprovedResilientCassandraClient>>();
+    var logger = provider.GetRequiredService<ILogger<ResilientCassandraClient>>();
     
-    var options = new ImprovedResilientClientOptions
+    var options = new ResilientClientOptions
     {
         // Monitoring intervals
         HostMonitoringInterval = TimeSpan.FromSeconds(5),
@@ -154,8 +168,7 @@ services.AddSingleton<IResilientCassandraClient>(provider =>
         // Multi-DC configuration
         MultiDC = new MultiDCConfiguration
         {
-            LocalDatacenter = "us-east-1",
-            UsedHostsPerRemoteDc = 2
+            LocalDatacenter = "us-east-1"
         },
         
         // Circuit breaker
@@ -167,7 +180,7 @@ services.AddSingleton<IResilientCassandraClient>(provider =>
         }
     };
     
-    return new ImprovedResilientCassandraClient(configuration, logger, options);
+    return new ResilientCassandraClient(configuration, logger, options);
 });
 ```
 
@@ -175,7 +188,7 @@ services.AddSingleton<IResilientCassandraClient>(provider =>
 
 #### Development Environment
 ```csharp
-var devOptions = new ImprovedResilientClientOptions
+var devOptions = new ResilientClientOptions
 {
     HostMonitoringInterval = TimeSpan.FromSeconds(10), // Less aggressive
     HealthCheckInterval = TimeSpan.FromMinutes(1),     // Less frequent
@@ -189,7 +202,7 @@ var devOptions = new ImprovedResilientClientOptions
 
 #### Production Environment
 ```csharp
-var prodOptions = new ImprovedResilientClientOptions
+var prodOptions = new ResilientClientOptions
 {
     HostMonitoringInterval = TimeSpan.FromSeconds(3),  // Aggressive monitoring
     HealthCheckInterval = TimeSpan.FromSeconds(15),    // Frequent health checks
@@ -226,6 +239,144 @@ public class UserService
         await _cassandra.ExecuteAsync(
             "UPDATE users SET name = ?, email = ? WHERE id = ?",
             user.Name, user.Email, user.Id);
+    }
+}
+```
+
+### Advanced Usage with Custom Consistency
+
+```csharp
+public class InventoryService
+{
+    private readonly IResilientCassandraClient _cassandra;
+    
+    public async Task<int> GetInventoryCountAsync(string productId)
+    {
+        // Use LOCAL_ONE for fast reads when eventual consistency is acceptable
+        var statement = new SimpleStatement(
+            "SELECT quantity FROM inventory WHERE product_id = ?", productId)
+            .SetConsistencyLevel(ConsistencyLevel.LocalOne)
+            .SetIdempotence(true);
+            
+        var result = await _cassandra.ExecuteAsync(statement);
+        return result.FirstOrDefault()?.GetValue<int>("quantity") ?? 0;
+    }
+    
+    public async Task UpdateInventoryAsync(string productId, int delta)
+    {
+        // Use LOCAL_QUORUM for critical writes
+        var statement = new SimpleStatement(
+            "UPDATE inventory SET quantity = quantity + ? WHERE product_id = ?",
+            delta, productId)
+            .SetConsistencyLevel(ConsistencyLevel.LocalQuorum);
+            
+        await _cassandra.ExecuteAsync(statement);
+    }
+}
+```
+
+### Implementing Custom Retry Policy
+
+```csharp
+public class CustomRetryService
+{
+    private readonly IResilientCassandraClient _cassandra;
+    private readonly IRetryPolicy _customRetryPolicy;
+    
+    public CustomRetryService(IResilientCassandraClient cassandra)
+    {
+        _cassandra = cassandra;
+        _customRetryPolicy = new ConsistencyDowngradeRetryPolicy();
+    }
+    
+    public async Task<IEnumerable<Order>> GetRecentOrdersAsync(Guid customerId)
+    {
+        // Create statement with custom retry policy
+        var statement = new SimpleStatement(
+            "SELECT * FROM orders WHERE customer_id = ? AND created_at > ?",
+            customerId, DateTime.UtcNow.AddDays(-30))
+            .SetConsistencyLevel(ConsistencyLevel.LocalQuorum)
+            .SetRetryPolicy(_customRetryPolicy)
+            .SetIdempotence(true);
+            
+        var result = await _cassandra.ExecuteAsync(statement);
+        return result.Select(row => MapToOrder(row));
+    }
+}
+
+// Custom retry policy that downgrades consistency on timeout
+public class ConsistencyDowngradeRetryPolicy : IRetryPolicy
+{
+    public RetryDecision OnReadTimeout(IStatement query, ConsistencyLevel cl,
+        int requiredResponses, int receivedResponses, bool dataRetrieved, int nbRetry)
+    {
+        if (nbRetry == 0 && cl == ConsistencyLevel.LocalQuorum)
+        {
+            // First retry: downgrade to LOCAL_ONE
+            return RetryDecision.Retry(ConsistencyLevel.LocalOne);
+        }
+        return RetryDecision.Rethrow();
+    }
+    
+    public RetryDecision OnWriteTimeout(IStatement query, ConsistencyLevel cl,
+        string writeType, int requiredAcks, int receivedAcks, int nbRetry)
+    {
+        // Don't retry writes by default
+        return RetryDecision.Rethrow();
+    }
+    
+    public RetryDecision OnUnavailable(IStatement query, ConsistencyLevel cl,
+        int requiredReplica, int aliveReplica, int nbRetry)
+    {
+        if (nbRetry == 0 && cl > ConsistencyLevel.One)
+        {
+            // Try with reduced consistency
+            return RetryDecision.Retry(ConsistencyLevel.One);
+        }
+        return RetryDecision.Rethrow();
+    }
+    
+    public RetryDecision OnRequestError(IStatement query, ConsistencyLevel cl,
+        Exception ex, int nbRetry)
+    {
+        return RetryDecision.Rethrow();
+    }
+}
+```
+
+### Batch Operations with Resilience
+
+```csharp
+public class BatchService
+{
+    private readonly IResilientCassandraClient _cassandra;
+    
+    public async Task ProcessBatchAsync(IEnumerable<Event> events)
+    {
+        // Create a batch statement
+        var batch = new BatchStatement();
+        
+        foreach (var evt in events)
+        {
+            batch.Add(new SimpleStatement(
+                "INSERT INTO events (id, type, data, created_at) VALUES (?, ?, ?, ?)",
+                evt.Id, evt.Type, evt.Data, evt.CreatedAt));
+        }
+        
+        // Set batch properties
+        batch.SetConsistencyLevel(ConsistencyLevel.LocalQuorum)
+             .SetBatchType(BatchType.Unlogged); // Use unlogged for performance
+        
+        try
+        {
+            await _cassandra.ExecuteAsync(batch);
+        }
+        catch (WriteTimeoutException ex)
+        {
+            // Handle partial write scenario
+            _logger.LogWarning("Batch write timeout: {Message}", ex.Message);
+            // Consider implementing idempotent retry logic
+        }
     }
 }
 ```
@@ -403,7 +554,7 @@ groups:
 
 # Operation mode changes
 [WARN] Operation mode changed from Normal to Degraded
-[WARN] Lowered consistency level to ONE due to degraded cluster state
+[INFO] Cluster is in degraded state - consistency level unchanged
 ```
 
 ## Testing Strategy
@@ -451,8 +602,8 @@ public async Task MultiDC_FailoverToRemoteWhenLocalDown()
 services.AddSingleton<IResilientCassandraClient, ResilientCassandraClient>();
 
 // New
-services.AddSingleton<IResilientCassandraClient, ImprovedResilientCassandraClient>();
-services.Configure<ImprovedResilientClientOptions>(options =>
+services.AddSingleton<IResilientCassandraClient, ResilientCassandraClient>();
+services.Configure<ResilientClientOptions>(options =>
 {
     // Configure as needed
 });
@@ -466,7 +617,7 @@ var session = cluster.Connect();
 var result = await session.ExecuteAsync("SELECT * FROM users");
 
 // New
-var client = new ImprovedResilientCassandraClient(config, logger);
+var client = new ResilientCassandraClient(config, logger);
 var result = await client.ExecuteIdempotentAsync("SELECT * FROM users");
 ```
 
@@ -520,14 +671,58 @@ Solutions:
 
 ## Best Practices
 
+### Cassandra-Specific Best Practices
+
+1. **Consistency Level Selection**
+   - Use `LOCAL_ONE` for non-critical reads where eventual consistency is acceptable
+   - Use `LOCAL_QUORUM` for critical reads and most writes
+   - Avoid `ALL` or `QUORUM` across datacenters unless absolutely necessary
+   - Always use `LOCAL_*` consistency levels to avoid cross-DC latency
+
+2. **Query Patterns**
+   - Always mark read queries as idempotent: `.SetIdempotence(true)`
+   - Use prepared statements for frequently executed queries
+   - Avoid `SELECT *` - specify only needed columns
+   - Use partition keys in WHERE clauses for efficient queries
+
+3. **Connection Pool Management**
+   - Configure appropriate connection pool sizes based on workload
+   - Use aggressive connection refresh for recovered hosts
+   - Monitor connection pool metrics for saturation
+
+4. **Retry Strategy**
+   - Implement custom retry policies for your specific use cases
+   - Don't retry non-idempotent writes
+   - Use exponential backoff for retries
+   - Consider speculative execution for read-heavy workloads
+
+5. **Batch Operations**
+   - Use unlogged batches for performance when atomicity isn't required
+   - Keep batch sizes reasonable (< 100 statements)
+   - Group statements by partition key when possible
+   - Avoid cross-partition batches
+
+6. **Timeout Configuration**
+   - Set appropriate read/write timeouts based on your SLAs
+   - Use shorter timeouts for non-critical operations
+   - Configure client-side timeout slightly higher than server-side
+
+7. **Multi-Datacenter Considerations**
+   - Always specify local datacenter in configuration
+   - Implement application-level DC failover logic
+   - Monitor per-DC health metrics
+   - Use `LOCAL_*` consistency levels
+
+### General Resilient Client Best Practices
+
 1. **Single Instance**: Create one client per application
-2. **Idempotent Queries**: Mark all read queries as idempotent
-3. **Monitor Metrics**: Set up comprehensive monitoring
-4. **Test Recovery**: Regularly test failure scenarios
-5. **Configure for Environment**: Different settings for dev/prod
-6. **Document Configuration**: Keep configuration documented
-7. **Review Logs**: Regular log analysis for patterns
+2. **Monitor Metrics**: Set up comprehensive monitoring and alerting
+3. **Test Recovery**: Regularly test failure scenarios in staging
+4. **Configure for Environment**: Different settings for dev/prod
+5. **Document Configuration**: Keep configuration documented
+6. **Review Logs**: Regular log analysis for patterns
+7. **Circuit Breaker Tuning**: Adjust thresholds based on observed behavior
 
 ## Conclusion
 
-The ImprovedResilientCassandraClient provides true production-grade resilience with automatic recovery from all common failure scenarios. With proper configuration and monitoring, it eliminates the need for manual intervention or application restarts during Cassandra cluster issues.
+The ResilientCassandraClient provides true production-grade resilience with automatic recovery from all common failure scenarios. With proper configuration and monitoring, it eliminates the need for manual intervention or application restarts during Cassandra cluster issues.

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Test Recovery Scenarios for Improved Resilient Client
+# Test Recovery Scenarios for Resilient Client
 # This script demonstrates various failure scenarios and automatic recovery
 
 set -e

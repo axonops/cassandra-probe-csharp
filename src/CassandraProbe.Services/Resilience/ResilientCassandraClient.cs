@@ -112,7 +112,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         }
         
         await RecreateSessionAsync();
-        return _session;
+        return _session ?? throw new InvalidOperationException("Failed to create or recreate session");
     }
     
     private async Task<bool> IsSessionHealthyAsync(ISession session)
@@ -121,7 +121,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         {
             var statement = new SimpleStatement("SELECT now() FROM system.local")
                 .SetIdempotence(true)
-                .SetConsistencyLevel(ConsistencyLevel.One)
+                .SetConsistencyLevel(ConsistencyLevel.LocalOne)
                 .SetReadTimeoutMillis(2000);
                 
             await session.ExecuteAsync(statement);
@@ -297,11 +297,11 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     
     private ILoadBalancingPolicy CreateLoadBalancingPolicy()
     {
+        // Note: The usedHostsPerRemoteDc parameter is deprecated and will be removed
+        // DC failover should be handled at the application level
         var dcAwarePolicy = string.IsNullOrEmpty(_options.MultiDC.LocalDatacenter)
             ? new DCAwareRoundRobinPolicy()
-            : new DCAwareRoundRobinPolicy(
-                _options.MultiDC.LocalDatacenter,
-                _options.MultiDC.UsedHostsPerRemoteDc);
+            : new DCAwareRoundRobinPolicy(_options.MultiDC.LocalDatacenter);
         
         return new TokenAwarePolicy(dcAwarePolicy);
     }
@@ -600,7 +600,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                     var statement = new SimpleStatement("SELECT now() FROM system.local")
                         .SetHost(host)
                         .SetIdempotence(true)
-                        .SetConsistencyLevel(ConsistencyLevel.One)
+                        .SetConsistencyLevel(ConsistencyLevel.LocalOne)
                         .SetReadTimeoutMillis(2000);
                         
                     await _session.ExecuteAsync(statement);
@@ -630,7 +630,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             var statement = new SimpleStatement("SELECT now() FROM system.local")
                 .SetHost(host)
                 .SetIdempotence(true)
-                .SetConsistencyLevel(ConsistencyLevel.One)
+                .SetConsistencyLevel(ConsistencyLevel.LocalOne)
                 .SetReadTimeoutMillis(2000);
             
             await _session.ExecuteAsync(statement);
@@ -797,13 +797,9 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 break;
                 
             case OperationMode.Degraded:
-                // Lower consistency for better availability
-                if (statement.ConsistencyLevel == ConsistencyLevel.Quorum || 
-                    statement.ConsistencyLevel == ConsistencyLevel.All)
-                {
-                    statement.SetConsistencyLevel(ConsistencyLevel.One);
-                    _logger.LogDebug("Lowered consistency level to ONE due to degraded cluster state");
-                }
+                // In degraded mode, we still allow queries but don't modify consistency level
+                // Users should implement their own retry policies if they need consistency level changes
+                _logger.LogDebug("Cluster is in degraded state but consistency level remains unchanged");
                 break;
         }
     }
@@ -977,7 +973,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             // Try a simple query
             var session = await GetHealthySessionAsync();
             await session.ExecuteAsync(new SimpleStatement("SELECT now() FROM system.local")
-                .SetConsistencyLevel(ConsistencyLevel.One)
+                .SetConsistencyLevel(ConsistencyLevel.LocalOne)
                 .SetReadTimeoutMillis(2000));
                 
             return true;
@@ -1098,7 +1094,10 @@ public class ResilientClientOptions
 public class MultiDCConfiguration
 {
     public string? LocalDatacenter { get; set; }
+    
+    [Obsolete("DC failover should be handled at the application level. This property is no longer used.")]
     public int UsedHostsPerRemoteDc { get; set; } = 2;
+    
     public bool AllowRemoteDCsForLocalConsistencyLevel { get; set; } = false;
 }
 
