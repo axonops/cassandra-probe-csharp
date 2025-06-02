@@ -93,7 +93,8 @@ cassandra-probe schedule [schedule-options]
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--resilient-client` | - | Use resilient client with enhanced connection recovery | false |
+| `--resilient-client` | - | (Reserved for future use) | false |
+| `--resilient-demo` | - | Run resilient client demonstration | false |
 
 ## Examples
 
@@ -274,35 +275,37 @@ cassandra-probe \
 # Run resilient client demo to see how it handles failures
 cassandra-probe \
   --contact-points "node1:9042,node2:9042,node3:9042" \
-  --resilient-client
+  --resilient-demo
 
 # With datacenter awareness for multi-DC clusters
 cassandra-probe \
   --contact-points "node1:9042,node2:9042,node3:9042" \
   --datacenter us-east-1 \
-  --resilient-client
+  --resilient-demo
 
 # With authentication
 cassandra-probe \
   --contact-points cluster:9042 \
   -u cassandra \
   -p cassandra \
-  --resilient-client
+  --resilient-demo
 
 # Verbose mode to see all recovery details
 cassandra-probe \
   --contact-points cluster:9042 \
   --datacenter alpha \
-  --resilient-client \
+  --resilient-demo \
   --verbose \
   --log-level Debug
 ```
 
-The resilient client demonstration:
+The resilient client demonstration (`--resilient-demo`):
 - Shows standard vs resilient client behavior side-by-side
 - Demonstrates automatic failure detection and recovery
 - Logs all state transitions and recovery actions
 - Provides production-ready code that can be copied to your application
+
+Note: The `--resilient-client` flag is reserved for future use to enable resilient client mode for regular probing operations.
 
 ### Configuration File Usage
 

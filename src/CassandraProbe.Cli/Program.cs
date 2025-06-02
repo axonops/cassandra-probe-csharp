@@ -78,13 +78,22 @@ class Program
         logger.LogInformation("Cassandra Probe starting...");
 
         // Handle resilient client demonstration
-        if (options.UseResilientClient)
+        if (options.RunResilientDemo)
         {
             logger.LogInformation("Running resilient client demonstration...");
             var resilienceDemo = _serviceProvider.GetRequiredService<ResilienceDemo>();
             ResilienceScenarios.LogScenarios(logger);
             await resilienceDemo.StartDemoAsync();
             return 0;
+        }
+        
+        // Log if using resilient client
+        if (options.UseResilientClient && !options.RunResilientDemo)
+        {
+            logger.LogWarning("The --resilient-client flag is currently only supported with --resilient-demo");
+            logger.LogWarning("For production use, the resilient client implementation is available in the ResilientCassandraClient class");
+            logger.LogWarning("See docs/RESILIENT_CLIENT_IMPLEMENTATION.md for integration guidance");
+            return 1;
         }
 
         // Initialize monitoring services
@@ -364,8 +373,8 @@ class Program
         services.AddSingleton<MetadataMonitor>();
         services.AddSingleton<HostStateMonitor>();
 
-        // Resilient client services (if enabled)
-        if (options.UseResilientClient)
+        // Resilient client services (if enabled for either demo or regular use)
+        if (options.UseResilientClient || options.RunResilientDemo)
         {
             services.AddSingleton<IResilientCassandraClient>(provider => 
             {

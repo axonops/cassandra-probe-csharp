@@ -122,6 +122,9 @@ public class CommandLineOptions
     // Resilience Options
     [Option("resilient-client", HelpText = "Use resilient client with enhanced connection recovery")]
     public bool UseResilientClient { get; set; }
+    
+    [Option("resilient-demo", HelpText = "Run resilient client demonstration showing failure scenarios")]
+    public bool RunResilientDemo { get; set; }
 
     // Other Options
     [Option("config", HelpText = "Path to configuration file")]
