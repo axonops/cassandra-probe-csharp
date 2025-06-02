@@ -1,0 +1,23 @@
+services:
+  cassandra:
+    image: cassandra:4.1
+    container_name: cassandra-demo
+    ports:
+      - "19042:9042"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=DemoCluster
+      - CASSANDRA_DC=datacenter1
+      - CASSANDRA_ENDPOINT_SNITCH=SimpleSnitch
+      - MAX_HEAP_SIZE=512M
+      - HEAP_NEWSIZE=128M
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "SELECT now() FROM system.local"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    volumes:
+      - cassandra-demo-data:/var/lib/cassandra
+
+volumes:
+  cassandra-demo-data:
