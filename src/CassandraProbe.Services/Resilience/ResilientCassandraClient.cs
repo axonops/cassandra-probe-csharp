@@ -16,6 +16,17 @@ namespace CassandraProbe.Services.Resilience;
 /// <summary>
 /// Production-grade resilient Cassandra client with automatic recovery capabilities.
 /// Provides session/cluster recreation, circuit breakers, multi-DC support, and comprehensive monitoring.
+/// 
+/// Key Features:
+/// - Automatic session/cluster recreation on failures
+/// - Per-host circuit breakers to prevent connection storms
+/// - Multi-datacenter aware with health monitoring
+/// - Graceful degradation modes based on cluster health
+/// - Aggressive connection recovery for failed hosts
+/// - Comprehensive metrics and monitoring
+/// 
+/// This implementation follows Cassandra best practices and provides hooks for
+/// custom retry policies and consistency level management.
 /// </summary>
 public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
 {
@@ -26,12 +37,12 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     private readonly ResilientClientOptions _options;
     
     // Monitoring and recovery components
-    private readonly Timer _hostMonitorTimer;
-    private readonly Timer _connectionRefreshTimer;
-    private readonly Timer _healthCheckTimer;
-    private readonly ConcurrentDictionary<IPAddress, HostStateInfo> _hostStates = new();
-    private readonly ConcurrentDictionary<IPAddress, CircuitBreakerState> _circuitBreakers = new();
-    private readonly SemaphoreSlim _recreationLock = new(1, 1);
+    private readonly Timer _hostMonitorTimer;        // Monitors host up/down states
+    private readonly Timer _connectionRefreshTimer;   // Periodically refreshes connections
+    private readonly Timer _healthCheckTimer;         // Checks overall cluster health
+    private readonly ConcurrentDictionary<IPAddress, HostStateInfo> _hostStates = new();          // Tracks state per host
+    private readonly ConcurrentDictionary<IPAddress, CircuitBreakerState> _circuitBreakers = new(); // Circuit breaker per host
+    private readonly SemaphoreSlim _recreationLock = new(1, 1); // Prevents concurrent session recreation
     
     // Metrics
     private long _totalQueries;
@@ -119,6 +130,12 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     {
         try
         {
+            // Health check query using LOCAL_ONE for minimal latency
+            // This query:
+            // - Uses system.local table which is always available
+            // - Is idempotent (safe to retry)
+            // - Has a short timeout to fail fast
+            // - Uses LOCAL_ONE to avoid cross-DC latency
             var statement = new SimpleStatement("SELECT now() FROM system.local")
                 .SetIdempotence(true)
                 .SetConsistencyLevel(ConsistencyLevel.LocalOne)
@@ -220,13 +237,16 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     {
         var builder = Cluster.Builder();
         
-        // Add contact points
+        // Add contact points - these are the initial nodes to connect to
+        // The driver will discover all other nodes in the cluster automatically
         foreach (var contactPoint in _configuration.ContactPoints)
         {
             builder.AddContactPoint(contactPoint);
         }
         
         // Configure aggressive reconnection for fast recovery
+        // ConstantReconnectionPolicy: Attempts reconnection at fixed intervals
+        // Alternative: ExponentialReconnectionPolicy for exponential backoff
         builder.WithReconnectionPolicy(new ConstantReconnectionPolicy(
             _options.ReconnectDelayMs));
         
@@ -254,10 +274,14 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             .SetConsistencyLevel(ParseConsistencyLevel(_configuration.Query.ConsistencyLevel)));
         
         // Multi-DC aware load balancing
+        // TokenAwarePolicy: Routes queries to replicas that own the data
+        // DCAwareRoundRobinPolicy: Prefers local DC, round-robins within DC
         var loadBalancingPolicy = CreateLoadBalancingPolicy();
         builder.WithLoadBalancingPolicy(loadBalancingPolicy);
         
         // Retry policy for transient failures
+        // DefaultRetryPolicy: Basic retry logic for timeouts and unavailable
+        // Alternative: Create custom IRetryPolicy for specific requirements
         builder.WithRetryPolicy(new DefaultRetryPolicy());
         
         // Speculative execution for read queries (requires idempotence)
@@ -481,20 +505,29 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         var metrics = GetMetrics();
         var previousMode = _currentMode;
         
+        // Determine operation mode based on cluster health
+        // This provides a clear escalation path as the cluster degrades
+        
         if (metrics.UpHosts == 0)
         {
+            // No hosts available - complete outage
             _currentMode = OperationMode.Emergency;
         }
         else if (metrics.UpHosts < metrics.TotalHosts / 2)
         {
+            // Less than half the hosts available - high risk of data loss
+            // Only allow reads to prevent split-brain scenarios
             _currentMode = OperationMode.ReadOnly;
         }
         else if (metrics.SuccessRate < 0.9 || metrics.UpHosts < metrics.TotalHosts)
         {
+            // Some hosts down or high failure rate - degraded but operational
+            // Consider implementing consistency level adjustments here
             _currentMode = OperationMode.Degraded;
         }
         else
         {
+            // All hosts up and success rate > 90% - healthy cluster
             _currentMode = OperationMode.Normal;
         }
         
@@ -591,12 +624,16 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         var tasks = new List<Task>();
         
         // Force multiple connections to refresh the pool
+        // This helps ensure stale connections are replaced with fresh ones
+        // after a host recovers from a failure
         for (int i = 0; i < _options.ConnectionsPerHost; i++)
         {
             tasks.Add(Task.Run(async () =>
             {
                 try
                 {
+                    // Target specific host to force connection creation
+                    // Using LOCAL_ONE for fast response
                     var statement = new SimpleStatement("SELECT now() FROM system.local")
                         .SetHost(host)
                         .SetIdempotence(true)
@@ -607,6 +644,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 }
                 catch (Exception ex)
                 {
+                    // Individual connection failures are expected during recovery
                     _logger.LogDebug("Aggressive refresh query {Index} failed: {Error}", i, ex.Message);
                 }
             }));
@@ -713,16 +751,20 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         
         try
         {
-            // Check operation mode
+            // Step 1: Check operation mode and apply restrictions
+            // This may block writes in ReadOnly mode or all queries in Emergency mode
             ApplyOperationModeRestrictions(statement);
             
-            // Get healthy session
+            // Step 2: Get a healthy session, creating new one if necessary
+            // This handles automatic session/cluster recreation
             var session = await GetHealthySessionAsync();
             
-            // Apply circuit breaker logic
+            // Step 3: Apply circuit breaker logic
+            // This prevents queries to known-bad hosts
             statement = ApplyCircuitBreakerLogic(statement);
             
-            // Apply retry policy
+            // Step 4: Apply retry policy with exponential backoff
+            // This handles transient failures gracefully
             var retryPolicy = Policy
                 .Handle<Exception>(ex => IsRetryableException(ex))
                 .WaitAndRetryAsync(
@@ -800,6 +842,27 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 // In degraded mode, we still allow queries but don't modify consistency level
                 // Users should implement their own retry policies if they need consistency level changes
                 _logger.LogDebug("Cluster is in degraded state but consistency level remains unchanged");
+                
+                /* OPTION: Automatic consistency level downgrade for better availability
+                 * Uncomment this block if you want automatic consistency downgrade in degraded mode.
+                 * This trades consistency for availability during partial outages.
+                 * 
+                 * WARNING: This may violate your consistency requirements. Only enable if:
+                 * - Your application can tolerate eventual consistency
+                 * - You understand the implications for your data model
+                 * - You've tested the behavior under various failure scenarios
+                 * 
+                if (statement.ConsistencyLevel == ConsistencyLevel.Quorum || 
+                    statement.ConsistencyLevel == ConsistencyLevel.LocalQuorum ||
+                    statement.ConsistencyLevel == ConsistencyLevel.All)
+                {
+                    // Downgrade to LOCAL_ONE for better availability
+                    // Note: This only affects this specific query, not the default consistency
+                    statement.SetConsistencyLevel(ConsistencyLevel.LocalOne);
+                    _logger.LogWarning("Automatically downgraded consistency level from {Original} to LOCAL_ONE due to degraded cluster state", 
+                        statement.ConsistencyLevel);
+                }
+                */
                 break;
         }
     }

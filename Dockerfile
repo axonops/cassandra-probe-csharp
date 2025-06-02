@@ -1,7 +1,7 @@
 # Multi-stage build for Cassandra Probe C#
 
 # Build stage
-FROM mcr.microsoft.com/dotnet/sdk:6.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
 # Copy project files
@@ -26,7 +26,7 @@ RUN dotnet publish src/CassandraProbe.Cli/CassandraProbe.Cli.csproj \
     --no-restore
 
 # Runtime stage
-FROM mcr.microsoft.com/dotnet/runtime:6.0-alpine AS runtime
+FROM mcr.microsoft.com/dotnet/runtime:9.0-alpine AS runtime
 WORKDIR /app
 
 # Install dependencies for network tools

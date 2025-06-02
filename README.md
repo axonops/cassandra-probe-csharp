@@ -77,6 +77,7 @@ Expand-Archive cassandra-probe-*.zip
 - **Apache Cassandra**: 4.0 or later (Cassandra 3.x is not supported)
 - **Operating System**: Windows, Linux, or macOS
 - **Runtime**: None required (self-contained executable)
+- **For building from source**: .NET 9.0 SDK or later
 
 ## ✨ Key Features
 
