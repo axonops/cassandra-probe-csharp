@@ -241,7 +241,21 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         // The driver will discover all other nodes in the cluster automatically
         foreach (var contactPoint in _configuration.ContactPoints)
         {
-            builder.AddContactPoint(contactPoint);
+            var parts = contactPoint.Split(':');
+            if (parts.Length == 2 && int.TryParse(parts[1], out var port))
+            {
+                builder.AddContactPoint(parts[0]).WithPort(port);
+            }
+            else
+            {
+                builder.AddContactPoint(contactPoint);
+            }
+        }
+        
+        // Set default port if specified
+        if (_configuration.Connection.Port != 9042)
+        {
+            builder.WithPort(_configuration.Connection.Port);
         }
         
         // Configure aggressive reconnection for fast recovery
