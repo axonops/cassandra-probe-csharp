@@ -4,6 +4,8 @@
 
 The `ResilientCassandraClient` provides true automatic recovery without requiring application restarts. This production-grade implementation includes all critical improvements for handling various failure scenarios. This guide covers the features, configuration, and best practices.
 
+**Important Note about Datacenter Configuration**: When using the resilient client with multi-datacenter clusters, it's recommended to specify the local datacenter using the `--datacenter` flag. This ensures accurate monitoring and logging of datacenter-specific availability. If not specified, the client will still function correctly but datacenter-specific monitoring messages may be less informative.
+
 ## Key Features
 
 ### 1. ✅ Automatic Session and Cluster Recreation

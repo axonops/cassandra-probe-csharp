@@ -560,16 +560,27 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             await Task.Delay(TimeSpan.FromSeconds(5));
             
             // Check if this affects local DC availability
-            var localDCHosts = _cluster.AllHosts()
-                .Where(h => h.Datacenter == _options.MultiDC.LocalDatacenter)
-                .ToList();
-                
-            var upInLocalDC = localDCHosts.Count(h => h.IsUp);
+            var localDatacenter = _options.MultiDC.LocalDatacenter ?? host.Datacenter;
             
-            if (upInLocalDC == 0)
+            if (!string.IsNullOrEmpty(localDatacenter))
             {
-                _logger.LogCritical("No hosts available in local datacenter {DC}!", 
-                    _options.MultiDC.LocalDatacenter);
+                var localDCHosts = _cluster.AllHosts()
+                    .Where(h => h.Datacenter == localDatacenter)
+                    .ToList();
+                    
+                var upInLocalDC = localDCHosts.Count(h => h.IsUp);
+                var totalInLocalDC = localDCHosts.Count;
+                
+                if (upInLocalDC == 0 && totalInLocalDC > 0)
+                {
+                    _logger.LogCritical("All {Total} hosts in datacenter '{DC}' are DOWN!", 
+                        totalInLocalDC, localDatacenter);
+                }
+                else if (upInLocalDC < totalInLocalDC)
+                {
+                    _logger.LogWarning("{Up}/{Total} hosts remain UP in datacenter '{DC}'",
+                        upInLocalDC, totalInLocalDC, localDatacenter);
+                }
             }
         });
     }

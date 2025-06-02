@@ -368,9 +368,18 @@ class Program
         if (options.UseResilientClient)
         {
             services.AddSingleton<IResilientCassandraClient>(provider => 
-                new ResilientCassandraClient(
+            {
+                var resilientOptions = new ResilientClientOptions();
+                if (!string.IsNullOrEmpty(options.Datacenter))
+                {
+                    resilientOptions.MultiDC.LocalDatacenter = options.Datacenter;
+                }
+                
+                return new ResilientCassandraClient(
                     provider.GetRequiredService<ProbeConfiguration>(),
-                    provider.GetRequiredService<ILogger<ResilientCassandraClient>>()));
+                    provider.GetRequiredService<ILogger<ResilientCassandraClient>>(),
+                    resilientOptions);
+            });
             services.AddSingleton<ResilienceDemo>();
         }
 

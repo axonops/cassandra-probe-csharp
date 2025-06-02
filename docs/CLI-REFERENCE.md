@@ -276,6 +276,12 @@ cassandra-probe \
   --contact-points "node1:9042,node2:9042,node3:9042" \
   --resilient-client
 
+# With datacenter awareness for multi-DC clusters
+cassandra-probe \
+  --contact-points "node1:9042,node2:9042,node3:9042" \
+  --datacenter us-east-1 \
+  --resilient-client
+
 # With authentication
 cassandra-probe \
   --contact-points cluster:9042 \
@@ -286,6 +292,7 @@ cassandra-probe \
 # Verbose mode to see all recovery details
 cassandra-probe \
   --contact-points cluster:9042 \
+  --datacenter alpha \
   --resilient-client \
   --verbose \
   --log-level Debug
