@@ -58,6 +58,11 @@ public class HostStateMonitor
                 }
                 await Task.Delay(1000, cancellationToken);
             }
+            catch (TaskCanceledException)
+            {
+                // Expected when cancellation is requested during shutdown
+                return;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error initializing host state monitor");
@@ -77,6 +82,11 @@ public class HostStateMonitor
                 {
                     CheckForHostStateChanges(cluster);
                 }
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected when cancellation is requested during shutdown
+                break;
             }
             catch (Exception ex)
             {

@@ -45,6 +45,11 @@ public class MetadataMonitor
                 }
                 await Task.Delay(1000, cancellationToken);
             }
+            catch (TaskCanceledException)
+            {
+                // Expected when cancellation is requested during shutdown
+                return;
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error getting initial cluster metadata");
@@ -64,6 +69,11 @@ public class MetadataMonitor
                 {
                     LogClusterMetadata(cluster, "Periodic metadata update");
                 }
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected when cancellation is requested during shutdown
+                break;
             }
             catch (Exception ex)
             {
