@@ -1,226 +1,157 @@
-# Cassandra Probe Demo Scripts
+# CassandraProbe Scripts
 
-This directory contains demonstration scripts for the Cassandra Probe resilient client functionality.
+This directory contains demonstration and testing scripts for the CassandraProbe resilient client functionality.
 
-## 🚀 Quick Start
+## Script Organization
 
+### 🚀 Quick Start Demos
+
+#### **stable-demo.sh** (Recommended)
+The most reliable demonstration script using docker-compose for proper container orchestration.
 ```bash
-# Most reliable demo (RECOMMENDED)
 ./stable-demo.sh
-
-# Test with existing Cassandra
-./test-resilient.sh localhost:9042
 ```
-
-## Container Runtime Support
-
-All scripts support both **Docker** and **Podman**. Scripts automatically detect which runtime is available using the `container-runtime.sh` helper.
-
-## Scripts Overview
-
-### Core Demo Scripts
-
-#### 1. `stable-demo.sh` ⭐ RECOMMENDED
-The most reliable demo using docker-compose for proper orchestration.
 - Uses docker-compose for container management
-- Proper health checks ensure Cassandra is ready
-- Single node on port 19042 (avoids conflicts)
-- Clean side-by-side comparison of standard vs resilient client
-- Consistent and reliable results
+- Runs single Cassandra node on port 19042
+- Shows side-by-side comparison of standard vs resilient client
+- Includes health checks and proper startup sequencing
 
+#### **simple-stable-demo.sh**
+Alternative demo without docker-compose dependency.
 ```bash
+./simple-stable-demo.sh
+```
+- Works with Docker or Podman directly
+- No docker-compose required
+- Good for environments without compose
+
+#### **test-resilient.sh**
+Minimal test script for existing Cassandra installations.
+```bash
+./test-resilient.sh
+```
+- Assumes Cassandra is already running on localhost:9042
+- Quick way to test the resilient client functionality
+
+### 🧪 Advanced Testing Scripts
+
+#### **test-resilient-recovery-scenarios.sh**
+Comprehensive test suite demonstrating automatic recovery in various failure scenarios.
+```bash
+# Run all scenarios
+./test-resilient-recovery-scenarios.sh --all
+
+# Run specific scenario
+./test-resilient-recovery-scenarios.sh 1  # Single node failure
+./test-resilient-recovery-scenarios.sh 2  # Complete cluster outage
+./test-resilient-recovery-scenarios.sh 3  # Network issues
+./test-resilient-recovery-scenarios.sh 4  # Rolling restart
+```
+
+#### **test-resilient-client-rolling-restart.sh**
+Demonstrates resilient client behavior during a rolling restart maintenance window.
+```bash
+./test-resilient-client-rolling-restart.sh
+```
+- Creates 3-node cluster
+- Performs rolling restart with 10-second maintenance window per node
+- Shows continuous query execution throughout
+
+#### **test-recovery-scenarios.sh**
+Multi-datacenter recovery testing with various failure scenarios.
+```bash
+./test-recovery-scenarios.sh
+```
+- Tests multi-DC setups
+- Network partition scenarios
+- DC-level failures
+
+### 🛠️ Utility Scripts
+
+#### **container-runtime.sh**
+Shared library for container runtime detection (Docker/Podman).
+- Automatically sourced by other scripts
+- Detects and configures appropriate container runtime
+
+#### **container-helper.sh**
+Helper functions for container management.
+- Container cleanup prompts
+- Existing container detection
+- Shared utility functions
+
+#### **cleanup-all.sh**
+Cleanup utility to remove all Cassandra-related containers.
+```bash
+./cleanup-all.sh
+```
+- Finds and removes all Cassandra containers
+- Useful for cleaning up after failed tests
+
+## Prerequisites
+
+- Docker or Podman installed and running
+- .NET 9.0 SDK (for building the application)
+- docker-compose (for stable-demo.sh only)
+- Sufficient resources for running Cassandra containers
+
+## Common Usage Patterns
+
+### 1. First Time Demo
+```bash
+# Recommended approach
 ./stable-demo.sh
 ```
 
-#### 2. `test-resilient.sh`
-Simple test script for existing Cassandra installations.
-- No container management needed
-- Works with any running Cassandra instance
-- Accepts custom contact points
-- Quick 10-second comparison test
-- Minimal setup required
-
+### 2. Testing Recovery Scenarios
 ```bash
-# Test with local Cassandra (default port 9042)
+# Test all recovery scenarios
+./test-resilient-recovery-scenarios.sh --all
+```
+
+### 3. Quick Test with Existing Cassandra
+```bash
+# If you already have Cassandra running
 ./test-resilient.sh
-
-# Test with remote Cassandra
-./test-resilient.sh cassandra.example.com:9042
-
-# Test with custom port
-./test-resilient.sh localhost:19042
 ```
 
-#### 3. `working-demo.sh`
-Standalone container demo with optional failure simulation.
-- Manages single Cassandra container
-- Includes failure recovery demonstration
-- Interactive mode with user prompts
-- Good for understanding failure scenarios
-- Port detection to avoid conflicts
-
+### 4. Cleanup After Testing
 ```bash
-# Full interactive demo with failure simulation
-./working-demo.sh
-
-# Quick comparison only (no failure simulation)
-./working-demo.sh --quick
-```
-
-### Advanced Test Scripts
-
-#### 4. `demo-resilient-client.sh`
-Comprehensive demonstration with a 3-node cluster.
-- Creates full 3-node Cassandra cluster
-- Multiple failure scenarios (node failure, rolling restart, cluster outage)
-- Interactive menu system
-- Detailed logging and analysis
-- Best for understanding complex failure patterns
-
-```bash
-# Interactive menu
-./demo-resilient-client.sh
-
-# Run specific demo
-./demo-resilient-client.sh demo1  # Single node failure
-./demo-resilient-client.sh demo2  # Rolling restart
-./demo-resilient-client.sh demo3  # Cluster outage
-
-# Run all demos
-./demo-resilient-client.sh all
-```
-
-#### 5. `test-resilient-client.sh`
-Comprehensive test suite with multiple scenarios.
-- 3-node cluster setup
-- Rolling restart testing
-- Node failure simulation
-- Comparison tests
-- Full test suite option
-
-```bash
-# Interactive menu
-./test-resilient-client.sh
-
-# Quick commands
-./test-resilient-client.sh start   # Start cluster
-./test-resilient-client.sh stop    # Stop cluster
-./test-resilient-client.sh test    # Run full test suite
-```
-
-### Helper Scripts
-
-#### 6. `container-runtime.sh`
-Helper script for Docker/Podman detection.
-- Automatically detects available container runtime
-- Sets up environment variables
-- Used by other scripts (not meant to be run directly)
-
-## Choosing the Right Script
-
-| Use Case | Recommended Script |
-|----------|-------------------|
-| Quick demo to see the difference | `stable-demo.sh` |
-| Test with existing Cassandra | `test-resilient.sh` |
-| See failure recovery in action | `working-demo.sh` |
-| Deep dive into failure scenarios | `demo-resilient-client.sh` |
-| Automated testing | `test-resilient-client.sh` |
-
-## What to Expect
-
-When running the demos, you'll observe key differences between standard and resilient clients:
-
-**Standard Client:**
-- Basic connection pooling
-- Minimal retry logic
-- Standard DataStax driver behavior
-- Limited visibility into connection state
-
-**Resilient Client:**
-- Host monitoring messages every 5 seconds
-- Connection pool refresh every 60 seconds
-- Enhanced failure detection and recovery
-- Retry logic with exponential backoff
-- Detailed logging of state changes
-- Better handling of transient failures
-
-## Example Output
-
-```
-[14:32:15] Running STANDARD client for 10 seconds...
-[2025-01-06 14:32:15.123 INF] Cassandra Probe starting...
-[2025-01-06 14:32:16.456 INF] Session established
-[2025-01-06 14:32:16.789 INF] Query successful
-
-[14:32:25] Running RESILIENT client for 10 seconds...
-[2025-01-06 14:32:25.123 INF] Initializing ResilientCassandraClient
-[2025-01-06 14:32:25.456 INF] Host monitoring timer started
-[2025-01-06 14:32:25.789 INF] Initialized host state for /127.0.0.1: UP
-[2025-01-06 14:32:26.123 INF] Query succeeded after 0 attempts
-[2025-01-06 14:32:30.456 INF] [RESILIENT CLIENT] Monitoring 1 hosts...
+./cleanup-all.sh
 ```
 
 ## Troubleshooting
 
-### Common Issues
+### Container Conflicts
+If you see errors about existing containers:
+1. The scripts will prompt you to clean up existing containers
+2. Choose option 1 to stop and remove them
+3. Or run `./cleanup-all.sh` manually
 
-**"Port already in use"**
-- The demos use port 19042 to avoid conflicts with default Cassandra (9042)
-- Stop any containers: `docker stop cassandra-demo` or `podman stop cassandra-demo`
-- Check what's using the port: `lsof -i :19042` or `netstat -an | grep 19042`
-
-**"Cannot connect to Cassandra"**
-- Ensure Cassandra is running: `docker ps` or `podman ps`
-- Check logs: `docker logs cassandra-demo` or `podman logs cassandra-demo`
-- Wait longer - Cassandra can take 60-90 seconds to start
-- Verify the contact point is correct
-
-**"Build failed"**
-- Ensure .NET SDK is installed: `dotnet --version`
-- Try manual build: `cd .. && dotnet build -c Release`
-- Check for build errors in the output
-
-**"Container runtime not found"**
-- Install Docker Desktop or Podman
-- Ensure the service is running
-- For Podman, you may need: `systemctl --user start podman.socket`
+### Port Conflicts
+Default ports used:
+- `9042` - Standard Cassandra native port
+- `19042` - Used by stable-demo.sh to avoid conflicts
+- `9043`, `9044` - Additional nodes in multi-node setups
 
 ### Docker vs Podman
+The scripts automatically detect and use the available runtime. No configuration needed.
 
-**Docker users:**
-- Ensure Docker Desktop is running
-- May need `sudo` on Linux
-- Docker Compose should be included with Docker Desktop
+## Script Features
 
-**Podman users:**
-- Install podman-compose: `pip install podman-compose`
-- Start podman socket: `systemctl --user start podman.socket`
-- May need to configure rootless containers
+All demo scripts demonstrate:
+- ✅ Automatic session/cluster recreation on failure
+- ✅ Circuit breaker protection against cascading failures
+- ✅ Host state monitoring and automatic recovery
+- ✅ Multi-DC failover capabilities
+- ✅ Graceful degradation under various failure conditions
+- ✅ Recovery without application restart
 
-## Best Practices
+## Architecture
 
-1. **Start with `stable-demo.sh`** - Most reliable and straightforward
-2. **Use `test-resilient.sh`** for existing Cassandra clusters
-3. **Allow sufficient startup time** - Cassandra needs 60-90 seconds
-4. **Check port availability** before running demos
-5. **Clean up containers** when done:
-   ```bash
-   # For stable-demo.sh
-   docker compose -f ../docker-compose.demo.yml down
-   
-   # For other scripts
-   docker stop cassandra-demo && docker rm cassandra-demo
-   ```
-6. **Review logs** if something goes wrong - they contain valuable debugging info
-
-## Understanding the Results
-
-The resilient client provides several advantages:
-
-1. **Better Observability**: Detailed logging of connection states and recovery attempts
-2. **Proactive Monitoring**: Regular health checks prevent stale connections
-3. **Graceful Degradation**: Continues operating even when some nodes fail
-4. **Automatic Recovery**: Detects when failed nodes return and reconnects
-5. **Retry Logic**: Intelligent retries with backoff for transient failures
-
-These features make the resilient client more suitable for production environments where high availability is critical.
+The resilient client provides:
+1. **Proactive Monitoring**: Checks host states every 5 seconds
+2. **Connection Refresh**: Refreshes connections every 60 seconds
+3. **Health Checks**: Performs session health checks every 30 seconds
+4. **Circuit Breakers**: Prevents connection storms to failed hosts
+5. **Operation Modes**: Normal, Degraded, ReadOnly, Emergency
+6. **Automatic Recovery**: Session and cluster recreation without restart

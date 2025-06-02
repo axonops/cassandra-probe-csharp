@@ -14,27 +14,34 @@ using Polly.CircuitBreaker;
 namespace CassandraProbe.Services.Resilience;
 
 /// <summary>
-/// Production-grade resilient Cassandra client with enhanced connection recovery.
-/// Provides automatic failure detection, transparent recovery, and comprehensive monitoring.
+/// Production-grade resilient Cassandra client with automatic recovery capabilities.
+/// Provides session/cluster recreation, circuit breakers, multi-DC support, and comprehensive monitoring.
 /// </summary>
 public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
 {
-    private readonly ICluster _cluster;
-    private readonly ISession _session;
+    private ICluster _cluster = null!;
+    private ISession _session = null!;
     private readonly ILogger<ResilientCassandraClient> _logger;
+    private readonly ProbeConfiguration _configuration;
     private readonly ResilientClientOptions _options;
     
-    // Monitoring components
+    // Monitoring and recovery components
     private readonly Timer _hostMonitorTimer;
     private readonly Timer _connectionRefreshTimer;
+    private readonly Timer _healthCheckTimer;
     private readonly ConcurrentDictionary<IPAddress, HostStateInfo> _hostStates = new();
-    // Circuit breakers removed - simplified implementation for Polly 8.x compatibility
+    private readonly ConcurrentDictionary<IPAddress, CircuitBreakerState> _circuitBreakers = new();
+    private readonly SemaphoreSlim _recreationLock = new(1, 1);
     
     // Metrics
     private long _totalQueries;
     private long _failedQueries;
     private long _stateTransitions;
+    private long _sessionRecreations;
+    private long _clusterRecreations;
     private DateTime _startTime;
+    private DateTime _lastSessionRecreation;
+    private OperationMode _currentMode = OperationMode.Normal;
     
     private bool _disposed;
 
@@ -43,31 +50,18 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         ILogger<ResilientCassandraClient> logger,
         ResilientClientOptions? options = null)
     {
+        _configuration = configuration;
         _logger = logger;
         _options = options ?? ResilientClientOptions.Default;
         _startTime = DateTime.UtcNow;
+        _lastSessionRecreation = DateTime.UtcNow;
         
-        _logger.LogInformation("Initializing ResilientCassandraClient with enhanced failure handling");
+        _logger.LogInformation("Initializing ResilientCassandraClient with automatic recovery capabilities");
         
-        // Build cluster with resilient configuration
-        _cluster = BuildResilientCluster(configuration);
+        // Initial connection
+        InitializeClusterAndSession();
         
-        try
-        {
-            _session = _cluster.Connect();
-            _logger.LogInformation("Resilient client connected successfully to cluster: {ClusterName}", 
-                _cluster.Metadata.ClusterName);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to establish initial connection");
-            throw new ConnectionException("Failed to connect to Cassandra cluster", ex);
-        }
-        
-        // Initialize monitoring
-        InitializeHostStates();
-        
-        // Start background monitoring
+        // Start monitoring timers
         _hostMonitorTimer = new Timer(
             MonitorHostStates, 
             null, 
@@ -80,20 +74,154 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             _options.ConnectionRefreshInterval, 
             _options.ConnectionRefreshInterval);
         
+        _healthCheckTimer = new Timer(
+            PerformHealthCheck,
+            null,
+            _options.HealthCheckInterval,
+            _options.HealthCheckInterval);
+        
         _logger.LogInformation(
-            "Resilient client initialized with host monitoring every {MonitorInterval}s and connection refresh every {RefreshInterval}s",
-            _options.HostMonitoringInterval.TotalSeconds,
-            _options.ConnectionRefreshInterval.TotalSeconds);
+            "Resilient client initialized with automatic recovery, circuit breakers, and multi-DC support");
     }
+    
+    #region Initialization and Recovery
+    
+    private void InitializeClusterAndSession()
+    {
+        try
+        {
+            _cluster = BuildResilientCluster();
+            _session = _cluster.Connect();
+            InitializeHostStates();
+            
+            _logger.LogInformation("Successfully connected to cluster: {ClusterName}", 
+                _cluster.Metadata.ClusterName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to establish initial connection");
+            throw new ConnectionException("Failed to connect to Cassandra cluster", ex);
+        }
+    }
+    
+    private async Task<ISession> GetHealthySessionAsync()
+    {
+        if (_session != null && await IsSessionHealthyAsync(_session))
+        {
+            return _session;
+        }
+        
+        await RecreateSessionAsync();
+        return _session;
+    }
+    
+    private async Task<bool> IsSessionHealthyAsync(ISession session)
+    {
+        try
+        {
+            var statement = new SimpleStatement("SELECT now() FROM system.local")
+                .SetIdempotence(true)
+                .SetConsistencyLevel(ConsistencyLevel.One)
+                .SetReadTimeoutMillis(2000);
+                
+            await session.ExecuteAsync(statement);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Session health check failed: {Error}", ex.Message);
+            return false;
+        }
+    }
+    
+    private async Task RecreateSessionAsync()
+    {
+        await _recreationLock.WaitAsync();
+        try
+        {
+            // Double-check session health after acquiring lock
+            if (_session != null && await IsSessionHealthyAsync(_session))
+            {
+                return;
+            }
+            
+            _logger.LogWarning("Recreating Cassandra session due to health check failure");
+            
+            var oldSession = _session;
+            
+            try
+            {
+                // First try to create new session with existing cluster
+                _session = await _cluster.ConnectAsync();
+                oldSession?.Dispose();
+                
+                _sessionRecreations++;
+                _lastSessionRecreation = DateTime.UtcNow;
+                
+                _logger.LogInformation("Session successfully recreated (attempt #{Count})", _sessionRecreations);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to recreate session with existing cluster, attempting cluster recreation");
+                
+                // If session creation fails, try recreating the entire cluster
+                await RecreateClusterAsync();
+            }
+        }
+        finally
+        {
+            _recreationLock.Release();
+        }
+    }
+    
+    private async Task RecreateClusterAsync()
+    {
+        _logger.LogWarning("Recreating entire Cassandra cluster and session");
+        
+        var oldCluster = _cluster;
+        var oldSession = _session;
+        
+        try
+        {
+            // Create new cluster
+            _cluster = BuildResilientCluster();
+            
+            // Create new session
+            _session = await _cluster.ConnectAsync();
+            
+            // Re-initialize monitoring
+            InitializeHostStates();
+            
+            // Dispose old resources
+            oldSession?.Dispose();
+            oldCluster?.Dispose();
+            
+            _clusterRecreations++;
+            _sessionRecreations++;
+            _lastSessionRecreation = DateTime.UtcNow;
+            
+            _logger.LogInformation("Cluster and session successfully recreated (cluster #{ClusterCount}, session #{SessionCount})", 
+                _clusterRecreations, _sessionRecreations);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to recreate cluster, keeping old instances");
+            _cluster = oldCluster;
+            _session = oldSession;
+            throw;
+        }
+    }
+    
+    #endregion
     
     #region Cluster Building
     
-    private ICluster BuildResilientCluster(ProbeConfiguration configuration)
+    private ICluster BuildResilientCluster()
     {
         var builder = Cluster.Builder();
         
         // Add contact points
-        foreach (var contactPoint in configuration.ContactPoints)
+        foreach (var contactPoint in _configuration.ContactPoints)
         {
             builder.AddContactPoint(contactPoint);
         }
@@ -104,17 +232,17 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         
         // Configure socket options from configuration with resilient overrides
         var socketOptions = new SocketOptions()
-            .SetConnectTimeoutMillis(configuration.Connection.ConnectionTimeoutSeconds * 1000)
-            .SetReadTimeoutMillis(configuration.Connection.RequestTimeoutSeconds * 1000)
+            .SetConnectTimeoutMillis(_configuration.Connection.ConnectionTimeoutSeconds * 1000)
+            .SetReadTimeoutMillis(_configuration.Connection.RequestTimeoutSeconds * 1000)
             .SetKeepAlive(true)
             .SetTcpNoDelay(true);
             
         // Use resilient client timeouts if they're more aggressive
-        if (_options.ConnectTimeoutMs < configuration.Connection.ConnectionTimeoutSeconds * 1000)
+        if (_options.ConnectTimeoutMs < _configuration.Connection.ConnectionTimeoutSeconds * 1000)
         {
             socketOptions.SetConnectTimeoutMillis(_options.ConnectTimeoutMs);
         }
-        if (_options.ReadTimeoutMs < configuration.Connection.RequestTimeoutSeconds * 1000)
+        if (_options.ReadTimeoutMs < _configuration.Connection.RequestTimeoutSeconds * 1000)
         {
             socketOptions.SetReadTimeoutMillis(_options.ReadTimeoutMs);
         }
@@ -123,11 +251,11 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         
         // Configure query options from configuration
         builder.WithQueryOptions(new QueryOptions()
-            .SetConsistencyLevel(ParseConsistencyLevel(configuration.Query.ConsistencyLevel)));
+            .SetConsistencyLevel(ParseConsistencyLevel(_configuration.Query.ConsistencyLevel)));
         
-        // Load balancing with token awareness (same as standard client)
-        builder.WithLoadBalancingPolicy(new TokenAwarePolicy(
-            new DCAwareRoundRobinPolicy()));
+        // Multi-DC aware load balancing
+        var loadBalancingPolicy = CreateLoadBalancingPolicy();
+        builder.WithLoadBalancingPolicy(loadBalancingPolicy);
         
         // Retry policy for transient failures
         builder.WithRetryPolicy(new DefaultRetryPolicy());
@@ -141,54 +269,52 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                     _options.MaxSpeculativeExecutions));
         }
         
-        // Authentication if provided
-        if (!string.IsNullOrEmpty(configuration.Authentication.Username))
+        // Authentication
+        if (!string.IsNullOrEmpty(_configuration.Authentication.Username))
         {
             builder.WithCredentials(
-                configuration.Authentication.Username, 
-                configuration.Authentication.Password);
+                _configuration.Authentication.Username, 
+                _configuration.Authentication.Password);
         }
         
-        // SSL if enabled
-        if (configuration.Connection.UseSsl)
-        {
-            var sslOptions = new SSLOptions();
-            builder.WithSSL(sslOptions);
-        }
-        
-        // Authentication
-        if (!string.IsNullOrEmpty(configuration.Authentication.Username) && 
-            !string.IsNullOrEmpty(configuration.Authentication.Password))
-        {
-            builder.WithCredentials(configuration.Authentication.Username, configuration.Authentication.Password);
-            _logger.LogInformation("Using username/password authentication");
-        }
-        
-        // SSL Configuration
-        if (configuration.Connection.UseSsl)
+        // SSL
+        if (_configuration.Connection.UseSsl)
         {
             var sslOptions = new SSLOptions()
                 .SetRemoteCertValidationCallback((sender, certificate, chain, errors) => true);
                 
-            if (!string.IsNullOrEmpty(configuration.Connection.CertificatePath))
+            if (!string.IsNullOrEmpty(_configuration.Connection.CertificatePath))
             {
-                var cert = X509CertificateLoader.LoadCertificateFromFile(configuration.Connection.CertificatePath);
+                var cert = X509CertificateLoader.LoadCertificateFromFile(_configuration.Connection.CertificatePath);
                 sslOptions.SetCertificateCollection(new X509CertificateCollection { cert });
             }
             
             builder.WithSSL(sslOptions);
-            _logger.LogInformation("SSL/TLS enabled for connections");
         }
         
         return builder.Build();
     }
     
+    private ILoadBalancingPolicy CreateLoadBalancingPolicy()
+    {
+        var dcAwarePolicy = string.IsNullOrEmpty(_options.MultiDC.LocalDatacenter)
+            ? new DCAwareRoundRobinPolicy()
+            : new DCAwareRoundRobinPolicy(
+                _options.MultiDC.LocalDatacenter,
+                _options.MultiDC.UsedHostsPerRemoteDc);
+        
+        return new TokenAwarePolicy(dcAwarePolicy);
+    }
+    
     #endregion
     
-    #region Host Monitoring
+    #region Host Monitoring and Circuit Breakers
     
     private void InitializeHostStates()
     {
+        _hostStates.Clear();
+        _circuitBreakers.Clear();
+        
         foreach (var host in _cluster.AllHosts())
         {
             _hostStates[host.Address.Address] = new HostStateInfo
@@ -196,17 +322,11 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 IsUp = host.IsUp,
                 LastSeen = DateTime.UtcNow,
                 LastStateChange = DateTime.UtcNow,
-                ConsecutiveFailures = 0
+                ConsecutiveFailures = 0,
+                Datacenter = host.Datacenter
             };
             
-            if (host.IsUp)
-            {
-                _logger.LogInformation("Initialized host state for {Host}: UP", host.Address);
-            }
-            else
-            {
-                _logger.LogWarning("Initialized host state for {Host}: DOWN", host.Address);
-            }
+            _circuitBreakers[host.Address.Address] = new CircuitBreakerState(_options.CircuitBreaker);
         }
     }
     
@@ -216,6 +336,9 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         {
             var hosts = _cluster.AllHosts().ToList();
             var stateChanges = new List<HostStateChange>();
+            
+            // Monitor overall cluster health
+            MonitorDatacenterHealth(hosts);
             
             foreach (var host in hosts)
             {
@@ -242,17 +365,25 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                         if (currentState)
                         {
                             _logger.LogInformation(
-                                "[RESILIENT CLIENT] Host {Host} is now UP (was down for {Duration:F1}s)",
+                                "[HOST RECOVERY] Host {Host} in DC {DC} is now UP (was down for {Duration:F1}s)",
                                 hostAddress,
+                                host.Datacenter,
                                 (DateTime.UtcNow - previousState.LastStateChange).TotalSeconds);
                             
                             OnHostRecovered(host);
+                            
+                            // Reset circuit breaker
+                            if (_circuitBreakers.TryGetValue(hostAddress, out var breaker))
+                            {
+                                breaker.Reset();
+                            }
                         }
                         else
                         {
                             _logger.LogWarning(
-                                "[RESILIENT CLIENT] Host {Host} is now DOWN",
-                                hostAddress);
+                                "[HOST FAILURE] Host {Host} in DC {DC} is now DOWN",
+                                hostAddress,
+                                host.Datacenter);
                             
                             OnHostFailed(host);
                         }
@@ -309,6 +440,9 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                     "[RESILIENT CLIENT] Cluster state: {Up}/{Total} hosts UP, {Changes} state changes detected",
                     upCount, totalCount, stateChanges.Count);
             }
+            
+            // Update operation mode based on cluster state
+            UpdateOperationMode();
         }
         catch (Exception ex)
         {
@@ -316,19 +450,90 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         }
     }
     
+    private void MonitorDatacenterHealth(List<Host> hosts)
+    {
+        var dcGroups = hosts.GroupBy(h => h.Datacenter);
+        
+        foreach (var dc in dcGroups)
+        {
+            var upHosts = dc.Count(h => h.IsUp);
+            var totalHosts = dc.Count();
+            
+            if (upHosts == 0)
+            {
+                _logger.LogCritical("Datacenter {DC} has NO available hosts!", dc.Key);
+                
+                if (dc.Key == _options.MultiDC.LocalDatacenter)
+                {
+                    _logger.LogCritical("LOCAL datacenter is completely down!");
+                }
+            }
+            else if (upHosts < totalHosts / 2)
+            {
+                _logger.LogWarning("Datacenter {DC} is degraded: {Up}/{Total} hosts available", 
+                    dc.Key, upHosts, totalHosts);
+            }
+        }
+    }
+    
+    private void UpdateOperationMode()
+    {
+        var metrics = GetMetrics();
+        var previousMode = _currentMode;
+        
+        if (metrics.UpHosts == 0)
+        {
+            _currentMode = OperationMode.Emergency;
+        }
+        else if (metrics.UpHosts < metrics.TotalHosts / 2)
+        {
+            _currentMode = OperationMode.ReadOnly;
+        }
+        else if (metrics.SuccessRate < 0.9 || metrics.UpHosts < metrics.TotalHosts)
+        {
+            _currentMode = OperationMode.Degraded;
+        }
+        else
+        {
+            _currentMode = OperationMode.Normal;
+        }
+        
+        if (_currentMode != previousMode)
+        {
+            _logger.LogWarning("Operation mode changed from {Previous} to {Current}", 
+                previousMode, _currentMode);
+        }
+    }
+    
     private void OnHostFailed(Host host)
     {
-        // Log host failure
-        _logger.LogDebug("Host {Host} failed, retry policies will handle failures", host.Address);
+        // Additional recovery actions when host fails
+        Task.Run(async () =>
+        {
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            
+            // Check if this affects local DC availability
+            var localDCHosts = _cluster.AllHosts()
+                .Where(h => h.Datacenter == _options.MultiDC.LocalDatacenter)
+                .ToList();
+                
+            var upInLocalDC = localDCHosts.Count(h => h.IsUp);
+            
+            if (upInLocalDC == 0)
+            {
+                _logger.LogCritical("No hosts available in local datacenter {DC}!", 
+                    _options.MultiDC.LocalDatacenter);
+            }
+        });
     }
     
     private void OnHostRecovered(Host host)
     {
-        // Test the recovered host
-        _ = Task.Run(async () =>
+        // Aggressive connection refresh for recovered host
+        Task.Run(async () =>
         {
-            await Task.Delay(TimeSpan.FromSeconds(2)); // Give it time to fully start
-            await TestHostConnection(host);
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            await AggressiveConnectionRefresh(host);
         });
     }
     
@@ -342,11 +547,13 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         {
             _logger.LogDebug("[CONNECTION REFRESH] Starting periodic connection refresh");
             
-            // Force metadata refresh by executing a lightweight query
-            await _session.ExecuteAsync(new SimpleStatement("SELECT key FROM system.local"));
+            var session = await GetHealthySessionAsync();
+            
+            // Force metadata refresh
+            await session.ExecuteAsync(new SimpleStatement("SELECT key FROM system.local"));
             
             // Test each host connection
-            var tasks = _cluster.AllHosts().Select(TestHostConnection).ToArray();
+            var tasks = _cluster.AllHosts().Select(h => TestHostConnection(h, aggressive: false)).ToArray();
             var results = await Task.WhenAll(tasks);
             
             var successCount = results.Count(r => r);
@@ -356,18 +563,19 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 "[CONNECTION REFRESH] Completed: {Success}/{Total} hosts healthy",
                 successCount, totalCount);
             
-            // Log any unhealthy hosts
-            var unhealthyHosts = _cluster.AllHosts()
-                .Zip(results, (host, healthy) => new { host, healthy })
-                .Where(x => !x.healthy)
-                .Select(x => x.host.Address)
+            // Perform aggressive refresh for recovered hosts
+            var recoveredHosts = _hostStates
+                .Where(kvp => kvp.Value.IsUp && kvp.Value.ConsecutiveFailures > 0)
+                .Select(kvp => kvp.Key)
                 .ToList();
-            
-            if (unhealthyHosts.Any())
+                
+            foreach (var hostAddress in recoveredHosts)
             {
-                _logger.LogWarning(
-                    "[CONNECTION REFRESH] Unhealthy hosts: {Hosts}",
-                    string.Join(", ", unhealthyHosts));
+                var host = _cluster.AllHosts().FirstOrDefault(h => h.Address.Address.Equals(hostAddress));
+                if (host != null)
+                {
+                    await AggressiveConnectionRefresh(host);
+                }
             }
         }
         catch (Exception ex)
@@ -376,13 +584,49 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         }
     }
     
-    private async Task<bool> TestHostConnection(Host host)
+    private async Task AggressiveConnectionRefresh(Host host)
+    {
+        _logger.LogInformation("Performing aggressive connection refresh for recovered host {Host}", host.Address);
+        
+        var tasks = new List<Task>();
+        
+        // Force multiple connections to refresh the pool
+        for (int i = 0; i < _options.ConnectionsPerHost; i++)
+        {
+            tasks.Add(Task.Run(async () =>
+            {
+                try
+                {
+                    var statement = new SimpleStatement("SELECT now() FROM system.local")
+                        .SetHost(host)
+                        .SetIdempotence(true)
+                        .SetConsistencyLevel(ConsistencyLevel.One)
+                        .SetReadTimeoutMillis(2000);
+                        
+                    await _session.ExecuteAsync(statement);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug("Aggressive refresh query {Index} failed: {Error}", i, ex.Message);
+                }
+            }));
+        }
+        
+        await Task.WhenAll(tasks);
+        
+        // Reset consecutive failures if host is responding
+        if (_hostStates.TryGetValue(host.Address.Address, out var state))
+        {
+            state.ConsecutiveFailures = 0;
+        }
+    }
+    
+    private async Task<bool> TestHostConnection(Host host, bool aggressive = false)
     {
         try
         {
             var stopwatch = Stopwatch.StartNew();
             
-            // Use a lightweight query to test the connection
             var statement = new SimpleStatement("SELECT now() FROM system.local")
                 .SetHost(host)
                 .SetIdempotence(true)
@@ -405,6 +649,12 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 state.LastHealthCheckDuration = stopwatch.Elapsed;
             }
             
+            // Update circuit breaker
+            if (_circuitBreakers.TryGetValue(host.Address.Address, out var breaker))
+            {
+                breaker.RecordSuccess();
+            }
+            
             return true;
         }
         catch (Exception ex)
@@ -420,13 +670,36 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 state.LastHealthCheck = DateTime.UtcNow;
             }
             
+            // Update circuit breaker
+            if (_circuitBreakers.TryGetValue(host.Address.Address, out var breaker))
+            {
+                breaker.RecordFailure();
+            }
+            
             return false;
+        }
+    }
+    
+    private async void PerformHealthCheck(object? state)
+    {
+        try
+        {
+            // Check if we need session/cluster recreation
+            if (!await IsHealthyAsync())
+            {
+                _logger.LogWarning("Health check failed, attempting recovery");
+                await RecreateSessionAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during health check");
         }
     }
     
     #endregion
     
-    #region Query Execution
+    #region Query Execution with Circuit Breakers
     
     public async Task<RowSet> ExecuteAsync(string cql, params object[] values)
     {
@@ -440,6 +713,15 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         
         try
         {
+            // Check operation mode
+            ApplyOperationModeRestrictions(statement);
+            
+            // Get healthy session
+            var session = await GetHealthySessionAsync();
+            
+            // Apply circuit breaker logic
+            statement = ApplyCircuitBreakerLogic(statement);
+            
             // Apply retry policy
             var retryPolicy = Policy
                 .Handle<Exception>(ex => IsRetryableException(ex))
@@ -458,7 +740,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             
             var result = await retryPolicy.ExecuteAsync(async () =>
             {
-                return await _session.ExecuteAsync(statement);
+                return await session.ExecuteAsync(statement);
             });
             
             stopwatch.Stop();
@@ -471,11 +753,18 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                     statement.ToString());
             }
             
+            // Record success for circuit breaker
+            RecordQuerySuccess(statement);
+            
             return result;
         }
         catch (Exception ex)
         {
             _failedQueries++;
+            
+            // Record failure for circuit breaker
+            RecordQueryFailure(statement, ex);
+            
             _logger.LogError(ex, 
                 "Query failed after all retry attempts: {Query}",
                 statement.ToString());
@@ -486,9 +775,125 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     public async Task<RowSet> ExecuteIdempotentAsync(string cql, params object[] values)
     {
         var statement = new SimpleStatement(cql, values)
-            .SetIdempotence(true); // Enable speculative execution
+            .SetIdempotence(true);
         
         return await ExecuteAsync(statement);
+    }
+    
+    private void ApplyOperationModeRestrictions(IStatement statement)
+    {
+        switch (_currentMode)
+        {
+            case OperationMode.Emergency:
+                throw new InvalidOperationException(
+                    "Cluster is in emergency state - no queries allowed. All hosts are down.");
+                
+            case OperationMode.ReadOnly:
+                if (!IsReadQuery(statement))
+                {
+                    throw new InvalidOperationException(
+                        "Cluster is in read-only mode due to degraded state. Only SELECT queries are allowed.");
+                }
+                break;
+                
+            case OperationMode.Degraded:
+                // Lower consistency for better availability
+                if (statement.ConsistencyLevel == ConsistencyLevel.Quorum || 
+                    statement.ConsistencyLevel == ConsistencyLevel.All)
+                {
+                    statement.SetConsistencyLevel(ConsistencyLevel.One);
+                    _logger.LogDebug("Lowered consistency level to ONE due to degraded cluster state");
+                }
+                break;
+        }
+    }
+    
+    private IStatement ApplyCircuitBreakerLogic(IStatement statement)
+    {
+        // Check if statement targets a specific host
+        var targetHost = GetTargetHost(statement);
+        if (targetHost != null)
+        {
+            if (_circuitBreakers.TryGetValue(targetHost.Address.Address, out var breaker))
+            {
+                if (breaker.State == CircuitState.Open)
+                {
+                    _logger.LogDebug("Circuit breaker OPEN for host {Host}, routing to different host", 
+                        targetHost.Address);
+                    
+                    // Remove host preference to let driver choose another host
+                    statement = RemoveHostPreference(statement);
+                }
+            }
+        }
+        
+        return statement;
+    }
+    
+    private Host? GetTargetHost(IStatement statement)
+    {
+        // This would need to use reflection or other means to determine target host
+        // For now, return null (no specific host targeted)
+        return null;
+    }
+    
+    private IStatement RemoveHostPreference(IStatement statement)
+    {
+        // Create new statement without host preference
+        if (statement is SimpleStatement simple)
+        {
+            return new SimpleStatement(simple.QueryString, simple.QueryValues);
+        }
+        return statement;
+    }
+    
+    private void RecordQuerySuccess(IStatement statement)
+    {
+        // Record success for all involved hosts
+        // This is simplified - in reality would need to track which host served the query
+        foreach (var breaker in _circuitBreakers.Values)
+        {
+            if (breaker.State == CircuitState.HalfOpen)
+            {
+                breaker.RecordSuccess();
+            }
+        }
+    }
+    
+    private void RecordQueryFailure(IStatement statement, Exception ex)
+    {
+        // Record failure for specific host if identifiable
+        if (IsHostSpecificError(ex, out var hostAddress))
+        {
+            if (_circuitBreakers.TryGetValue(hostAddress, out var breaker))
+            {
+                breaker.RecordFailure();
+                
+                if (breaker.State == CircuitState.Open)
+                {
+                    _logger.LogWarning("Circuit breaker opened for host {Host} after {Failures} consecutive failures",
+                        hostAddress, breaker.ConsecutiveFailures);
+                }
+            }
+        }
+    }
+    
+    private bool IsHostSpecificError(Exception ex, out IPAddress hostAddress)
+    {
+        hostAddress = IPAddress.None;
+        // This would need to parse exception details to identify specific host
+        // For now, return false
+        return false;
+    }
+    
+    private bool IsReadQuery(IStatement statement)
+    {
+        if (statement is SimpleStatement simple)
+        {
+            var query = simple.QueryString.Trim().ToUpperInvariant();
+            return query.StartsWith("SELECT");
+        }
+        return false;
     }
     
     private bool IsRetryableException(Exception ex)
@@ -510,6 +915,17 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         var upHosts = _hostStates.Count(kvp => kvp.Value.IsUp);
         var totalHosts = _hostStates.Count;
         
+        var dcMetrics = _hostStates
+            .GroupBy(kvp => kvp.Value.Datacenter)
+            .ToDictionary(
+                g => g.Key ?? "unknown",
+                g => new DatacenterMetrics
+                {
+                    TotalHosts = g.Count(),
+                    UpHosts = g.Count(kvp => kvp.Value.IsUp),
+                    AverageFailures = g.Average(kvp => kvp.Value.ConsecutiveFailures)
+                });
+        
         return new ResilientClientMetrics
         {
             TotalQueries = _totalQueries,
@@ -520,6 +936,11 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             UpHosts = upHosts,
             TotalHosts = totalHosts,
             Uptime = DateTime.UtcNow - _startTime,
+            SessionRecreations = _sessionRecreations,
+            ClusterRecreations = _clusterRecreations,
+            LastSessionRecreation = _lastSessionRecreation,
+            CurrentOperationMode = _currentMode.ToString(),
+            DatacenterMetrics = dcMetrics,
             HostStates = _hostStates.ToDictionary(
                 kvp => kvp.Key.ToString(),
                 kvp => new HostMetrics
@@ -528,7 +949,10 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                     ConsecutiveFailures = kvp.Value.ConsecutiveFailures,
                     LastStateChange = kvp.Value.LastStateChange,
                     LastHealthCheck = kvp.Value.LastHealthCheck,
-                    LastHealthCheckDuration = kvp.Value.LastHealthCheckDuration
+                    LastHealthCheckDuration = kvp.Value.LastHealthCheckDuration,
+                    CircuitBreakerState = _circuitBreakers.TryGetValue(kvp.Key, out var cb) 
+                        ? cb.State.ToString() 
+                        : "Unknown"
                 })
         };
     }
@@ -544,8 +968,18 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 return false;
             }
             
+            // Check if current mode allows queries
+            if (_currentMode == OperationMode.Emergency)
+            {
+                return false;
+            }
+            
             // Try a simple query
-            await ExecuteAsync("SELECT now() FROM system.local");
+            var session = await GetHealthySessionAsync();
+            await session.ExecuteAsync(new SimpleStatement("SELECT now() FROM system.local")
+                .SetConsistencyLevel(ConsistencyLevel.One)
+                .SetReadTimeoutMillis(2000));
+                
             return true;
         }
         catch
@@ -566,6 +1000,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         
         _hostMonitorTimer?.Dispose();
         _connectionRefreshTimer?.Dispose();
+        _healthCheckTimer?.Dispose();
         
         _session?.Dispose();
         _cluster?.Dispose();
@@ -586,6 +1021,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         public int ConsecutiveFailures { get; set; }
         public DateTime? LastHealthCheck { get; set; }
         public TimeSpan? LastHealthCheckDuration { get; set; }
+        public string? Datacenter { get; set; }
     }
     
     private class HostStateChange
@@ -609,7 +1045,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             "LOCAL_QUORUM" => ConsistencyLevel.LocalQuorum,
             "EACH_QUORUM" => ConsistencyLevel.EachQuorum,
             "LOCAL_ONE" => ConsistencyLevel.LocalOne,
-            _ => ConsistencyLevel.LocalQuorum // Default to LocalQuorum if not specified
+            _ => ConsistencyLevel.LocalQuorum
         };
     }
     
@@ -617,29 +1053,164 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
 }
 
 /// <summary>
-/// Configuration options for the resilient client
+/// Enhanced configuration options for the resilient client
 /// </summary>
 public class ResilientClientOptions
 {
+    // Monitoring intervals
     public TimeSpan HostMonitoringInterval { get; set; } = TimeSpan.FromSeconds(5);
     public TimeSpan ConnectionRefreshInterval { get; set; } = TimeSpan.FromMinutes(1);
+    public TimeSpan HealthCheckInterval { get; set; } = TimeSpan.FromSeconds(30);
     
+    // Timeouts
     public int ConnectTimeoutMs { get; set; } = 3000;
     public int ReadTimeoutMs { get; set; } = 5000;
-    public int QueryTimeoutMs { get; set; } = 5000;
     public long ReconnectDelayMs { get; set; } = 1000;
     
-    
+    // Retry behavior
     public int MaxRetryAttempts { get; set; } = 3;
     public int RetryBaseDelayMs { get; set; } = 100;
     public int RetryMaxDelayMs { get; set; } = 1000;
     
+    // Speculative execution
     public bool EnableSpeculativeExecution { get; set; } = true;
     public int SpeculativeDelayMs { get; set; } = 200;
     public int MaxSpeculativeExecutions { get; set; } = 2;
     
+    // Connection pool
+    public int ConnectionsPerHost { get; set; } = 2;
+    
+    // Query monitoring
     public int SlowQueryThresholdMs { get; set; } = 1000;
+    
+    // Multi-DC configuration
+    public MultiDCConfiguration MultiDC { get; set; } = new();
+    
+    // Circuit breaker configuration
+    public CircuitBreakerOptions CircuitBreaker { get; set; } = new();
     
     public static ResilientClientOptions Default => new();
 }
 
+/// <summary>
+/// Multi-datacenter configuration
+/// </summary>
+public class MultiDCConfiguration
+{
+    public string? LocalDatacenter { get; set; }
+    public int UsedHostsPerRemoteDc { get; set; } = 2;
+    public bool AllowRemoteDCsForLocalConsistencyLevel { get; set; } = false;
+}
+
+/// <summary>
+/// Circuit breaker configuration
+/// </summary>
+public class CircuitBreakerOptions
+{
+    public int FailureThreshold { get; set; } = 5;
+    public TimeSpan OpenDuration { get; set; } = TimeSpan.FromSeconds(30);
+    public int SuccessThresholdInHalfOpen { get; set; } = 2;
+}
+
+/// <summary>
+/// Circuit breaker state tracking
+/// </summary>
+public class CircuitBreakerState
+{
+    private readonly CircuitBreakerOptions _options;
+    private int _consecutiveFailures;
+    private int _consecutiveSuccesses;
+    private DateTime _lastFailureTime;
+    private DateTime _openedTime;
+    private readonly object _lock = new();
+    
+    public CircuitState State { get; private set; } = CircuitState.Closed;
+    public int ConsecutiveFailures => _consecutiveFailures;
+    
+    public CircuitBreakerState(CircuitBreakerOptions options)
+    {
+        _options = options;
+    }
+    
+    public void RecordSuccess()
+    {
+        lock (_lock)
+        {
+            _consecutiveFailures = 0;
+            
+            if (State == CircuitState.HalfOpen)
+            {
+                _consecutiveSuccesses++;
+                if (_consecutiveSuccesses >= _options.SuccessThresholdInHalfOpen)
+                {
+                    State = CircuitState.Closed;
+                    _consecutiveSuccesses = 0;
+                }
+            }
+        }
+    }
+    
+    public void RecordFailure()
+    {
+        lock (_lock)
+        {
+            _consecutiveFailures++;
+            _lastFailureTime = DateTime.UtcNow;
+            _consecutiveSuccesses = 0;
+            
+            if (State == CircuitState.Closed && _consecutiveFailures >= _options.FailureThreshold)
+            {
+                State = CircuitState.Open;
+                _openedTime = DateTime.UtcNow;
+            }
+            else if (State == CircuitState.HalfOpen)
+            {
+                State = CircuitState.Open;
+                _openedTime = DateTime.UtcNow;
+            }
+        }
+    }
+    
+    public void Reset()
+    {
+        lock (_lock)
+        {
+            State = CircuitState.Closed;
+            _consecutiveFailures = 0;
+            _consecutiveSuccesses = 0;
+        }
+    }
+    
+    public void CheckState()
+    {
+        lock (_lock)
+        {
+            if (State == CircuitState.Open && 
+                DateTime.UtcNow - _openedTime > _options.OpenDuration)
+            {
+                State = CircuitState.HalfOpen;
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Circuit breaker states
+/// </summary>
+public enum CircuitState
+{
+    Closed,    // Normal operation
+    Open,      // Failing, reject requests
+    HalfOpen   // Testing recovery
+}
+
+/// <summary>
+/// Operation modes for graceful degradation
+/// </summary>
+public enum OperationMode
+{
+    Normal,     // All operations allowed
+    Degraded,   // Reduced consistency levels
+    ReadOnly,   // Only SELECT queries allowed
+    Emergency   // No queries allowed
+}

@@ -45,6 +45,11 @@ public class ResilientClientMetrics
     public int UpHosts { get; set; }
     public int TotalHosts { get; set; }
     public TimeSpan Uptime { get; set; }
+    public long SessionRecreations { get; set; }
+    public long ClusterRecreations { get; set; }
+    public DateTime LastSessionRecreation { get; set; }
+    public string CurrentOperationMode { get; set; } = "Normal";
+    public Dictionary<string, DatacenterMetrics> DatacenterMetrics { get; set; } = new();
     public Dictionary<string, HostMetrics> HostStates { get; set; } = new();
 }
 
@@ -55,4 +60,12 @@ public class HostMetrics
     public DateTime LastStateChange { get; set; }
     public DateTime? LastHealthCheck { get; set; }
     public TimeSpan? LastHealthCheckDuration { get; set; }
+    public string CircuitBreakerState { get; set; } = "Closed";
+}
+
+public class DatacenterMetrics
+{
+    public int TotalHosts { get; set; }
+    public int UpHosts { get; set; }
+    public double AverageFailures { get; set; }
 }

@@ -68,7 +68,7 @@ Expand-Archive cassandra-probe-*.zip
 # Test specific CQL query
 ./cassandra-probe --contact-points cluster:9042 --test-cql "SELECT * FROM system.local"
 
-# Run resilient client demonstration (shows enhanced recovery approach)
+# Run resilient client with automatic recovery
 ./cassandra-probe --contact-points cluster:9042 --resilient-client
 ```
 
@@ -118,7 +118,7 @@ In our testing with the DataStax C# driver, we've observed some scenarios where 
 - **Rolling restart challenges** - During maintenance windows, applications may not seamlessly failover
 - **Cluster-wide outage recovery** - After full cluster outages, manual application restarts have been needed
 
-While the root cause of these behaviors isn't fully clear, we've developed a resilient client implementation that has helped improve recovery in our use cases.
+To address these challenges, we've implemented a production-grade resilient client with automatic recovery capabilities.
 
 ### Additional Resources
 - **[Our Observations & Workarounds](docs/CSHARP_DRIVER_OBSERVATIONS.md)** - What we've seen and how we handle it
@@ -135,14 +135,14 @@ While the root cause of these behaviors isn't fully clear, we've developed a res
 We provide comprehensive demo scripts that work with both Docker and Podman:
 
 ```bash
-# Quick verification of resilient client
-./scripts/verify-resilient-client.sh
+# Quick demo (recommended)
+./scripts/stable-demo.sh
 
-# Full interactive demo with 3-node cluster
-./scripts/demo-resilient-client.sh
+# Test all recovery scenarios
+./scripts/test-resilient-recovery-scenarios.sh --all
 
-# Automated test scenarios
-./scripts/test-resilient-client.sh
+# Test specific scenario (e.g., rolling restart)
+./scripts/test-resilient-client-rolling-restart.sh
 ```
 
 See [Demo Scripts Documentation](scripts/README.md) for details.

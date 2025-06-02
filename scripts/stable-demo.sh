@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Stable Demo Script for Resilient Client
-# This uses docker-compose for better reliability
+# Stable demo script for resilient client demonstration
+# This version uses a more reliable approach for container management
 
 set -e
 
@@ -11,129 +11,141 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE_FILE="$PROJECT_ROOT/docker-compose.demo.yml"
+# Script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Detect container runtime
-if command -v docker >/dev/null 2>&1; then
-    CONTAINER_RUNTIME="docker"
-    COMPOSE_CMD="docker compose"
-    # Try docker-compose if docker compose doesn't work
-    if ! docker compose version >/dev/null 2>&1; then
-        if command -v docker-compose >/dev/null 2>&1; then
-            COMPOSE_CMD="docker-compose"
-        else
-            echo -e "${RED}Error: Neither 'docker compose' nor 'docker-compose' found${NC}"
-            exit 1
-        fi
-    fi
-elif command -v podman >/dev/null 2>&1; then
-    CONTAINER_RUNTIME="podman"
-    COMPOSE_CMD="podman-compose"
-    if ! command -v podman-compose >/dev/null 2>&1; then
-        echo -e "${RED}Error: podman-compose not found. Install with: pip install podman-compose${NC}"
-        exit 1
-    fi
-else
-    echo -e "${RED}Error: Neither Docker nor Podman found${NC}"
+# Source helpers
+source "$SCRIPT_DIR/container-runtime.sh"
+source "$SCRIPT_DIR/container-helper.sh"
+
+# Setup runtime
+if ! setup_container_runtime; then
+    echo -e "${RED}Failed to setup container runtime${NC}"
     exit 1
 fi
 
-echo -e "${GREEN}Using: $CONTAINER_RUNTIME with $COMPOSE_CMD${NC}"
+# Configuration
+CONTAINER_NAME="cassandra-demo"
+CONTAINER_PORT=19042
+NETWORK_NAME="cassandra-demo-net"
 
-# Functions
-log() {
-    echo -e "${BLUE}[$(date +'%H:%M:%S')] $1${NC}"
-}
-
-error() {
-    echo -e "${RED}[$(date +'%H:%M:%S')] ERROR: $1${NC}"
-}
-
-success() {
-    echo -e "${GREEN}[$(date +'%H:%M:%S')] SUCCESS: $1${NC}"
+# Logging functions
+log() { echo -e "${BLUE}[$(date +'%H:%M:%S')] $1${NC}"; }
+info() { echo -e "${CYAN}[$(date +'%H:%M:%S')] $1${NC}"; }
+success() { echo -e "${GREEN}[$(date +'%H:%M:%S')] ✓ $1${NC}"; }
+warn() { echo -e "${YELLOW}[$(date +'%H:%M:%S')] ⚠ $1${NC}"; }
+error() { echo -e "${RED}[$(date +'%H:%M:%S')] ✗ $1${NC}"; }
+header() {
+    echo ""
+    echo -e "${MAGENTA}=======================================${NC}"
+    echo -e "${MAGENTA}$1${NC}"
+    echo -e "${MAGENTA}=======================================${NC}"
+    echo ""
 }
 
 # Cleanup function
 cleanup() {
     log "Cleaning up..."
-    cd "$PROJECT_ROOT"
-    $COMPOSE_CMD -f "$COMPOSE_FILE" down -v >/dev/null 2>&1 || true
-    success "Cleanup complete"
+    $CONTAINER_RUNTIME stop $CONTAINER_NAME 2>/dev/null || true
+    $CONTAINER_RUNTIME rm -f $CONTAINER_NAME 2>/dev/null || true
+    $CONTAINER_RUNTIME network rm $NETWORK_NAME 2>/dev/null || true
 }
 
 # Start Cassandra
 start_cassandra() {
-    log "Starting Cassandra..."
+    header "Starting Cassandra"
     
-    cd "$PROJECT_ROOT"
+    # Check for existing container
+    if $CONTAINER_RUNTIME ps -a --format "{{.Names}}" | grep -q "^${CONTAINER_NAME}$"; then
+        warn "Container $CONTAINER_NAME already exists"
+        read -p "Remove it and continue? (y/n) " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            cleanup
+        else
+            error "Exiting to preserve existing container"
+            exit 1
+        fi
+    fi
     
-    # Stop any existing instance
-    $COMPOSE_CMD -f "$COMPOSE_FILE" down -v >/dev/null 2>&1 || true
+    # Check if port is available
+    if lsof -i :$CONTAINER_PORT >/dev/null 2>&1; then
+        error "Port $CONTAINER_PORT is already in use"
+        error "Please stop the process using this port and try again"
+        return 1
+    fi
     
-    # Start fresh
-    if ! $COMPOSE_CMD -f "$COMPOSE_FILE" up -d; then
+    # Create network
+    $CONTAINER_RUNTIME network create $NETWORK_NAME 2>/dev/null || true
+    
+    # Start Cassandra
+    log "Starting Cassandra container..."
+    if ! $CONTAINER_RUNTIME run -d \
+        --name $CONTAINER_NAME \
+        --network $NETWORK_NAME \
+        -p ${CONTAINER_PORT}:9042 \
+        -e CASSANDRA_CLUSTER_NAME=DemoCluster \
+        -e CASSANDRA_DC=datacenter1 \
+        -e CASSANDRA_RACK=rack1 \
+        -e MAX_HEAP_SIZE=512M \
+        -e HEAP_NEWSIZE=128M \
+        cassandra:4.1; then
         error "Failed to start Cassandra"
         return 1
     fi
     
-    # Wait for health check
-    log "Waiting for Cassandra to be healthy (may take 60-90 seconds)..."
+    # Wait for Cassandra to be ready
+    log "Waiting for Cassandra to be ready (may take 60-90 seconds)..."
     local attempts=0
     local max_attempts=45  # 45 * 2 = 90 seconds
     
     while [ $attempts -lt $max_attempts ]; do
-        if $COMPOSE_CMD -f "$COMPOSE_FILE" ps | grep -q "healthy"; then
-            success "Cassandra is healthy!"
+        if $CONTAINER_RUNTIME exec $CONTAINER_NAME cqlsh -e "SELECT now() FROM system.local" >/dev/null 2>&1; then
+            success "Cassandra is ready!"
             break
         fi
         
-        # Check if container is still running
-        if ! $COMPOSE_CMD -f "$COMPOSE_FILE" ps | grep -q "cassandra-demo"; then
-            error "Cassandra container stopped unexpectedly"
-            $COMPOSE_CMD -f "$COMPOSE_FILE" logs --tail 50
-            return 1
+        # Show progress
+        if [ $((attempts % 5)) -eq 0 ]; then
+            echo -n "."
         fi
         
-        echo -n "."
         sleep 2
-        ((attempts++))
+        attempts=$((attempts + 1))
     done
-    echo ""
     
     if [ $attempts -eq $max_attempts ]; then
-        error "Cassandra failed to become healthy"
-        $COMPOSE_CMD -f "$COMPOSE_FILE" logs --tail 50
+        error "Cassandra failed to start within timeout"
         return 1
     fi
     
-    # Create test schema
-    log "Creating test schema..."
-    $CONTAINER_RUNTIME exec cassandra-demo cqlsh -e "
-        CREATE KEYSPACE IF NOT EXISTS demo 
+    # Create test keyspace
+    log "Creating test keyspace..."
+    $CONTAINER_RUNTIME exec $CONTAINER_NAME cqlsh -e "
+        CREATE KEYSPACE IF NOT EXISTS resilient_test 
         WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};
         
-        CREATE TABLE IF NOT EXISTS demo.test (
+        CREATE TABLE IF NOT EXISTS resilient_test.test_table (
             id UUID PRIMARY KEY,
             timestamp timestamp,
-            client text,
-            message text
-        );" || {
-        error "Failed to create schema"
-        return 1
-    }
+            value text
+        );"
     
-    success "Cassandra is ready on localhost:19042"
+    success "Cassandra is ready on port $CONTAINER_PORT"
     return 0
 }
 
 # Build project
 build_project() {
-    log "Building project..."
+    header "Building Project"
+    
     cd "$PROJECT_ROOT"
-    if dotnet build -c Release >/dev/null 2>&1; then
+    
+    if dotnet build -c Debug > /dev/null 2>&1; then
         success "Build complete"
         return 0
     else
@@ -142,88 +154,114 @@ build_project() {
     fi
 }
 
-# Run probe
-run_probe() {
-    local client_type=$1
-    local duration=$2
+# Run standard client demo
+run_standard_demo() {
+    header "Standard Cassandra Client Demo"
     
+    info "This demonstrates the standard client behavior"
+    info "Watch for issues during node failures..."
     echo ""
-    if [ "$client_type" = "resilient" ]; then
-        log "Running RESILIENT client for $duration seconds..."
-        local args="--resilient-client"
-    else
-        log "Running STANDARD client for $duration seconds..."
-        local args=""
-    fi
     
     cd "$PROJECT_ROOT"
-    dotnet run --project src/CassandraProbe.Cli -- \
-        --contact-points "localhost:19042" \
-        $args \
-        --test-cql "INSERT INTO demo.test (id, timestamp, client, message) VALUES (uuid(), toTimestamp(now()), '$client_type', 'test')" \
+    
+    # Run for a short time to demonstrate
+    timeout 30s dotnet run --project src/CassandraProbe.Cli -- \
+        --contact-points localhost:$CONTAINER_PORT \
+        --test-cql "INSERT INTO resilient_test.test_table (id, timestamp, value) VALUES (uuid(), toTimestamp(now()), 'standard client test')" \
         -i 2 \
-        -d $duration \
         --log-level Information \
-        --connection-events
+        --connection-events || true
+    
+    echo ""
+}
+
+# Run resilient client demo
+run_resilient_demo() {
+    header "Resilient Cassandra Client Demo"
+    
+    info "This demonstrates the resilient client with automatic recovery"
+    info "Notice the enhanced monitoring and recovery capabilities"
+    echo ""
+    
+    cd "$PROJECT_ROOT"
+    
+    # Run for a short time to demonstrate
+    timeout 30s dotnet run --project src/CassandraProbe.Cli -- \
+        --contact-points localhost:$CONTAINER_PORT \
+        --resilient-client \
+        --test-cql "INSERT INTO resilient_test.test_table (id, timestamp, value) VALUES (uuid(), toTimestamp(now()), 'resilient client test')" \
+        -i 2 \
+        --log-level Information \
+        --connection-events || true
+    
+    echo ""
+}
+
+# Show interactive menu
+show_menu() {
+    header "Recovery Scenarios"
+    
+    echo "You can now test various failure scenarios:"
+    echo ""
+    echo "1. Stop Cassandra:    ${CONTAINER_RUNTIME} stop $CONTAINER_NAME"
+    echo "2. Start Cassandra:   ${CONTAINER_RUNTIME} start $CONTAINER_NAME"
+    echo "3. Pause (network):   ${CONTAINER_RUNTIME} pause $CONTAINER_NAME"
+    echo "4. Unpause:          ${CONTAINER_RUNTIME} unpause $CONTAINER_NAME"
+    echo "5. Kill Cassandra:    ${CONTAINER_RUNTIME} kill $CONTAINER_NAME"
+    echo ""
+    echo "The resilient client will:"
+    echo "- Detect failures within 5 seconds"
+    echo "- Attempt automatic session/cluster recreation"
+    echo "- Use circuit breakers to prevent cascading failures"
+    echo "- Automatically recover when Cassandra returns"
+    echo ""
 }
 
 # Main execution
 main() {
-    echo -e "${MAGENTA}=======================================${NC}"
-    echo -e "${MAGENTA}Cassandra Resilient Client Demo${NC}"
-    echo -e "${MAGENTA}=======================================${NC}"
-    echo ""
+    header "Cassandra Resilient Client Demo"
     
-    # Build
+    # Build project
     if ! build_project; then
         exit 1
     fi
     
     # Start Cassandra
     if ! start_cassandra; then
-        cleanup
         exit 1
     fi
     
-    # Run demos
-    echo ""
-    echo -e "${MAGENTA}=== Side-by-Side Comparison ===${NC}"
+    # Show both clients
+    warn "First, showing STANDARD client behavior..."
+    sleep 3
+    run_standard_demo
     
-    run_probe "standard" 10
-    run_probe "resilient" 10
+    warn "Now, showing RESILIENT client behavior..."
+    sleep 3
+    run_resilient_demo
     
-    # Show results
-    echo ""
-    log "Query results:"
-    $CONTAINER_RUNTIME exec cassandra-demo cqlsh -e "
-        SELECT client, count(*) as total_queries 
-        FROM demo.test 
-        GROUP BY client;"
+    # Show menu
+    show_menu
     
-    echo ""
-    success "Demo complete!"
-    echo ""
-    echo "Key observations:"
-    echo "• Resilient client logs host monitoring activities"
-    echo "• Connection pool refresh happens periodically"
-    echo "• Enhanced failure detection capabilities"
-    echo ""
+    # Keep running for extended demo
+    read -p "Press Enter to run extended demo (5 minutes) or Ctrl+C to exit..."
     
-    # Offer to keep running
-    read -p "Keep Cassandra running for manual testing? (y/n) " -n 1 -r
-    echo ""
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        cleanup
-    else
-        echo ""
-        echo "Cassandra is running on localhost:19042"
-        echo "To connect: $CONTAINER_RUNTIME exec -it cassandra-demo cqlsh"
-        echo "To stop: $COMPOSE_CMD -f $COMPOSE_FILE down"
-    fi
+    header "Extended Resilient Client Demo"
+    info "Running for 5 minutes - try the failure scenarios above"
+    
+    cd "$PROJECT_ROOT"
+    dotnet run --project src/CassandraProbe.Cli -- \
+        --contact-points localhost:$CONTAINER_PORT \
+        --resilient-client \
+        --test-cql "INSERT INTO resilient_test.test_table (id, timestamp, value) VALUES (uuid(), toTimestamp(now()), 'extended test')" \
+        -i 2 \
+        -d 300 \
+        --log-level Information \
+        --connection-events
 }
 
-# Handle cleanup on exit
-trap cleanup EXIT INT TERM
+# Trap cleanup
+trap cleanup EXIT
 
-# Run main
+# Run
 main "$@"
