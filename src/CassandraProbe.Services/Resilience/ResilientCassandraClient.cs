@@ -1,5 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Diagnostics;
 using Cassandra;
 using CassandraProbe.Core.Configuration;
@@ -100,18 +102,30 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         builder.WithReconnectionPolicy(new ConstantReconnectionPolicy(
             _options.ReconnectDelayMs));
         
-        // Configure socket options for fast failure detection
-        builder.WithSocketOptions(new SocketOptions()
-            .SetConnectTimeoutMillis(_options.ConnectTimeoutMs)
-            .SetReadTimeoutMillis(_options.ReadTimeoutMs)
+        // Configure socket options from configuration with resilient overrides
+        var socketOptions = new SocketOptions()
+            .SetConnectTimeoutMillis(configuration.Connection.ConnectionTimeoutSeconds * 1000)
+            .SetReadTimeoutMillis(configuration.Connection.RequestTimeoutSeconds * 1000)
             .SetKeepAlive(true)
-            .SetTcpNoDelay(true));
+            .SetTcpNoDelay(true);
+            
+        // Use resilient client timeouts if they're more aggressive
+        if (_options.ConnectTimeoutMs < configuration.Connection.ConnectionTimeoutSeconds * 1000)
+        {
+            socketOptions.SetConnectTimeoutMillis(_options.ConnectTimeoutMs);
+        }
+        if (_options.ReadTimeoutMs < configuration.Connection.RequestTimeoutSeconds * 1000)
+        {
+            socketOptions.SetReadTimeoutMillis(_options.ReadTimeoutMs);
+        }
         
-        // Configure query options
+        builder.WithSocketOptions(socketOptions);
+        
+        // Configure query options from configuration
         builder.WithQueryOptions(new QueryOptions()
-            .SetConsistencyLevel(ConsistencyLevel.LocalQuorum));
+            .SetConsistencyLevel(ParseConsistencyLevel(configuration.Query.ConsistencyLevel)));
         
-        // Load balancing with token awareness
+        // Load balancing with token awareness (same as standard client)
         builder.WithLoadBalancingPolicy(new TokenAwarePolicy(
             new DCAwareRoundRobinPolicy()));
         
@@ -142,6 +156,30 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             builder.WithSSL(sslOptions);
         }
         
+        // Authentication
+        if (!string.IsNullOrEmpty(configuration.Authentication.Username) && 
+            !string.IsNullOrEmpty(configuration.Authentication.Password))
+        {
+            builder.WithCredentials(configuration.Authentication.Username, configuration.Authentication.Password);
+            _logger.LogInformation("Using username/password authentication");
+        }
+        
+        // SSL Configuration
+        if (configuration.Connection.UseSsl)
+        {
+            var sslOptions = new SSLOptions()
+                .SetRemoteCertValidationCallback((sender, certificate, chain, errors) => true);
+                
+            if (!string.IsNullOrEmpty(configuration.Connection.CertificatePath))
+            {
+                var cert = X509CertificateLoader.LoadCertificateFromFile(configuration.Connection.CertificatePath);
+                sslOptions.SetCertificateCollection(new X509CertificateCollection { cert });
+            }
+            
+            builder.WithSSL(sslOptions);
+            _logger.LogInformation("SSL/TLS enabled for connections");
+        }
+        
         return builder.Build();
     }
     
@@ -161,8 +199,14 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 ConsecutiveFailures = 0
             };
             
-            _logger.LogDebug("Initialized host state for {Host}: {State}", 
-                host.Address, host.IsUp ? "UP" : "DOWN");
+            if (host.IsUp)
+            {
+                _logger.LogInformation("Initialized host state for {Host}: UP", host.Address);
+            }
+            else
+            {
+                _logger.LogWarning("Initialized host state for {Host}: DOWN", host.Address);
+            }
         }
     }
     
@@ -197,7 +241,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                         
                         if (currentState)
                         {
-                            _logger.LogWarning(
+                            _logger.LogInformation(
                                 "[RESILIENT CLIENT] Host {Host} is now UP (was down for {Duration:F1}s)",
                                 hostAddress,
                                 (DateTime.UtcNow - previousState.LastStateChange).TotalSeconds);
@@ -226,9 +270,18 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                         LastStateChange = DateTime.UtcNow
                     };
                     
-                    _logger.LogInformation(
-                        "[RESILIENT CLIENT] New host discovered: {Host} ({State})",
-                        hostAddress, currentState ? "UP" : "DOWN");
+                    if (currentState)
+                    {
+                        _logger.LogInformation(
+                            "[RESILIENT CLIENT] New host discovered: {Host} (UP)",
+                            hostAddress);
+                    }
+                    else
+                    {
+                        _logger.LogWarning(
+                            "[RESILIENT CLIENT] New host discovered: {Host} (DOWN)",
+                            hostAddress);
+                    }
                 }
             }
             
@@ -541,6 +594,23 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         public bool WasUp { get; set; }
         public bool IsUp { get; set; }
         public DateTime Timestamp { get; set; }
+    }
+    
+    private ConsistencyLevel ParseConsistencyLevel(string level)
+    {
+        return level.ToUpperInvariant() switch
+        {
+            "ANY" => ConsistencyLevel.Any,
+            "ONE" => ConsistencyLevel.One,
+            "TWO" => ConsistencyLevel.Two,
+            "THREE" => ConsistencyLevel.Three,
+            "QUORUM" => ConsistencyLevel.Quorum,
+            "ALL" => ConsistencyLevel.All,
+            "LOCAL_QUORUM" => ConsistencyLevel.LocalQuorum,
+            "EACH_QUORUM" => ConsistencyLevel.EachQuorum,
+            "LOCAL_ONE" => ConsistencyLevel.LocalOne,
+            _ => ConsistencyLevel.LocalQuorum // Default to LocalQuorum if not specified
+        };
     }
     
     #endregion
