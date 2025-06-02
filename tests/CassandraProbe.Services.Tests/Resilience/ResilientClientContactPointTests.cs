@@ -1,5 +1,6 @@
 using System.Net;
 using CassandraProbe.Core.Configuration;
+using CassandraProbe.Core.Exceptions;
 using CassandraProbe.Services.Resilience;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
