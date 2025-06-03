@@ -4,7 +4,7 @@
 
 The `ResilientCassandraClient` provides true automatic recovery without requiring application restarts. This production-grade implementation includes all critical improvements for handling various failure scenarios. This guide covers the features, configuration, and best practices.
 
-**Important Note about Datacenter Configuration**: When using the resilient client with multi-datacenter clusters, it's recommended to specify the local datacenter using the `--datacenter` flag. This ensures accurate monitoring and logging of datacenter-specific availability. If not specified, the client will still function correctly but datacenter-specific monitoring messages may be less informative.
+**Critical Configuration Requirement**: The resilient client REQUIRES a local datacenter to be specified. This ensures the client only monitors and reacts to issues in the datacenter it's configured to use, preventing unnecessary alerts and state changes from remote datacenter events. The client will throw an `ArgumentException` if `LocalDatacenter` is not provided.
 
 ## Key Features
 
@@ -75,9 +75,15 @@ cluster.HostRemoved += OnClusterHostRemoved; // Node decommissioned
 - No manual intervention needed for cluster scaling
 - Failsafe polling ensures no changes are missed
 
-### 4. ✅ Multi-Datacenter Support and Monitoring
+### 4. ✅ Local Datacenter-Aware Monitoring
 
-Enhanced multi-DC configuration with per-DC health tracking.
+The resilient client focuses ONLY on your local datacenter, ignoring remote DC issues that don't affect your application.
+
+**Key Behaviors:**
+- Only monitors hosts in the configured local datacenter
+- Ignores host up/down events from remote datacenters
+- Circuit breakers and health checks apply only to local DC hosts
+- Remote DC failures won't trigger alerts or state changes
 
 **Note**: As of the latest C# driver versions, DC failover should be handled at the application level rather than in the driver. The driver will connect to the specified local datacenter, and failover logic should be implemented in your application code.
 
@@ -86,14 +92,15 @@ var options = new ResilientClientOptions
 {
     MultiDC = new MultiDCConfiguration
     {
-        LocalDatacenter = "us-east-1",
+        LocalDatacenter = "us-east-1",  // REQUIRED - throws ArgumentException if not provided
         AllowRemoteDCsForLocalConsistencyLevel = false
     }
 };
 
-// Per-DC health monitoring
-[CRITICAL] Datacenter us-east-1 has NO available hosts!
-[WARNING] Datacenter us-west-2 is degraded: 1/3 hosts available
+// Local DC health monitoring (remote DCs are ignored)
+[CRITICAL] Local datacenter 'us-east-1' is completely DOWN! All 3 hosts are unavailable!
+[WARNING] Local datacenter 'us-east-1' is DEGRADED: only 1/3 hosts available
+[INFO] Local datacenter 'us-east-1' status: 2/3 hosts available
 ```
 
 **Benefits:**
@@ -187,10 +194,10 @@ services.AddSingleton<IResilientCassandraClient>(provider =>
         RetryBaseDelayMs = 100,
         RetryMaxDelayMs = 1000,
         
-        // Multi-DC configuration
+        // Multi-DC configuration (REQUIRED)
         MultiDC = new MultiDCConfiguration
         {
-            LocalDatacenter = "us-east-1"
+            LocalDatacenter = "us-east-1"  // MANDATORY - must match your Cassandra DC name
         },
         
         // Circuit breaker

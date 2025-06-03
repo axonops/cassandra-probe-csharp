@@ -67,7 +67,17 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         _startTime = DateTime.UtcNow;
         _lastSessionRecreation = DateTime.UtcNow;
         
-        _logger.LogInformation("Initializing ResilientCassandraClient with automatic recovery capabilities");
+        // Validate that LocalDatacenter is provided
+        if (string.IsNullOrWhiteSpace(_options.MultiDC.LocalDatacenter))
+        {
+            throw new ArgumentException(
+                "LocalDatacenter must be specified in ResilientClientOptions. " +
+                "The resilient client requires a datacenter name to properly monitor only local DC hosts. " +
+                "Example: options.MultiDC.LocalDatacenter = \"us-east-1\"");
+        }
+        
+        _logger.LogInformation("Initializing ResilientCassandraClient for datacenter '{LocalDC}' with automatic recovery capabilities", 
+            _options.MultiDC.LocalDatacenter);
         
         // Initial connection
         InitializeClusterAndSession();
@@ -129,7 +139,15 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     
     private void OnClusterHostAdded(Host host)
     {
-        _logger.LogInformation("[TOPOLOGY CHANGE] Host ADDED: {Host} DC={DC} Rack={Rack}", 
+        // Only care about hosts in our local datacenter
+        if (!string.Equals(host.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("[TOPOLOGY CHANGE] Ignoring host ADDED in remote DC: {Host} DC={DC}", 
+                host.Address, host.Datacenter);
+            return;
+        }
+        
+        _logger.LogInformation("[TOPOLOGY CHANGE] Host ADDED in local DC: {Host} DC={DC} Rack={Rack}", 
             host.Address, host.Datacenter, host.Rack);
         
         var hostAddress = host.Address.Address;
@@ -148,7 +166,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             
             _circuitBreakers[hostAddress] = new CircuitBreakerState(_options.CircuitBreaker);
             
-            _logger.LogInformation("[RESILIENT CLIENT] Added host {Host} to monitoring (State: {State})",
+            _logger.LogInformation("[RESILIENT CLIENT] Added local DC host {Host} to monitoring (State: {State})",
                 hostAddress, host.IsUp ? "UP" : "DOWN");
         }
         
@@ -158,14 +176,23 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     
     private void OnClusterHostRemoved(Host host)
     {
-        _logger.LogInformation("[TOPOLOGY CHANGE] Host REMOVED: {Host}", host.Address);
+        // Only care about hosts in our local datacenter
+        if (!string.Equals(host.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("[TOPOLOGY CHANGE] Ignoring host REMOVED in remote DC: {Host} DC={DC}", 
+                host.Address, host.Datacenter);
+            return;
+        }
+        
+        _logger.LogInformation("[TOPOLOGY CHANGE] Host REMOVED from local DC: {Host} DC={DC}", 
+            host.Address, host.Datacenter);
         
         var hostAddress = host.Address.Address;
         
         // Remove from monitoring
         if (_hostStates.TryRemove(hostAddress, out var removedState))
         {
-            _logger.LogInformation("[RESILIENT CLIENT] Removed host {Host} from monitoring (was {State})",
+            _logger.LogInformation("[RESILIENT CLIENT] Removed local DC host {Host} from monitoring (was {State})",
                 hostAddress, removedState.IsUp ? "UP" : "DOWN");
         }
         
@@ -396,11 +423,12 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     
     private ILoadBalancingPolicy CreateLoadBalancingPolicy()
     {
-        // Note: The usedHostsPerRemoteDc parameter is deprecated and will be removed
-        // DC failover should be handled at the application level
-        var dcAwarePolicy = string.IsNullOrEmpty(_options.MultiDC.LocalDatacenter)
-            ? new DCAwareRoundRobinPolicy()
-            : new DCAwareRoundRobinPolicy(_options.MultiDC.LocalDatacenter);
+        // Always use DC-aware policy with local datacenter
+        // This ensures queries are only sent to nodes in the local DC
+        var dcAwarePolicy = new DCAwareRoundRobinPolicy(_options.MultiDC.LocalDatacenter);
+        
+        _logger.LogInformation("Load balancing policy configured for local datacenter '{DC}'", 
+            _options.MultiDC.LocalDatacenter);
         
         return new TokenAwarePolicy(dcAwarePolicy);
     }
@@ -414,7 +442,14 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         _hostStates.Clear();
         _circuitBreakers.Clear();
         
-        foreach (var host in _cluster.AllHosts())
+        var localDcHosts = _cluster.AllHosts()
+            .Where(h => string.Equals(h.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+            
+        _logger.LogInformation("Initializing monitoring for {Count} hosts in local datacenter '{DC}'", 
+            localDcHosts.Count, _options.MultiDC.LocalDatacenter);
+        
+        foreach (var host in localDcHosts)
         {
             _hostStates[host.Address.Address] = new HostStateInfo
             {
@@ -427,19 +462,30 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             
             _circuitBreakers[host.Address.Address] = new CircuitBreakerState(_options.CircuitBreaker);
         }
+        
+        // Log warning if no local DC hosts found
+        if (localDcHosts.Count == 0)
+        {
+            _logger.LogWarning("No hosts found in local datacenter '{DC}'. Available datacenters: {DCs}", 
+                _options.MultiDC.LocalDatacenter,
+                string.Join(", ", _cluster.AllHosts().Select(h => h.Datacenter).Distinct()));
+        }
     }
     
     private void MonitorHostStates(object? state)
     {
         try
         {
-            var hosts = _cluster.AllHosts().ToList();
+            // Only monitor hosts in our local datacenter
+            var localDcHosts = _cluster.AllHosts()
+                .Where(h => string.Equals(h.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
             var stateChanges = new List<HostStateChange>();
             
-            // Monitor overall cluster health
-            MonitorDatacenterHealth(hosts);
+            // Monitor local datacenter health only
+            MonitorDatacenterHealth(localDcHosts);
             
-            foreach (var host in hosts)
+            foreach (var host in localDcHosts)
             {
                 var currentState = host.IsUp;
                 var hostAddress = host.Address.Address;
@@ -523,8 +569,8 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 }
             }
             
-            // Clean up removed hosts
-            var currentAddresses = hosts.Select(h => h.Address.Address).ToHashSet();
+            // Clean up removed hosts (only considering local DC hosts)
+            var currentAddresses = localDcHosts.Select(h => h.Address.Address).ToHashSet();
             var removedHosts = _hostStates.Keys.Where(k => !currentAddresses.Contains(k)).ToList();
             
             foreach (var removed in removedHosts)
@@ -560,29 +606,31 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         }
     }
     
-    private void MonitorDatacenterHealth(List<Host> hosts)
+    private void MonitorDatacenterHealth(List<Host> localDcHosts)
     {
-        var dcGroups = hosts.GroupBy(h => h.Datacenter);
+        // We only monitor our local datacenter
+        var upHosts = localDcHosts.Count(h => h.IsUp);
+        var totalHosts = localDcHosts.Count;
         
-        foreach (var dc in dcGroups)
+        if (totalHosts == 0)
         {
-            var upHosts = dc.Count(h => h.IsUp);
-            var totalHosts = dc.Count();
-            
-            if (upHosts == 0)
-            {
-                _logger.LogCritical("Datacenter {DC} has NO available hosts!", dc.Key);
-                
-                if (dc.Key == _options.MultiDC.LocalDatacenter)
-                {
-                    _logger.LogCritical("LOCAL datacenter is completely down!");
-                }
-            }
-            else if (upHosts < totalHosts / 2)
-            {
-                _logger.LogWarning("Datacenter {DC} is degraded: {Up}/{Total} hosts available", 
-                    dc.Key, upHosts, totalHosts);
-            }
+            _logger.LogCritical("No hosts configured in local datacenter '{DC}'!", 
+                _options.MultiDC.LocalDatacenter);
+        }
+        else if (upHosts == 0)
+        {
+            _logger.LogCritical("Local datacenter '{DC}' is completely DOWN! All {Total} hosts are unavailable!", 
+                _options.MultiDC.LocalDatacenter, totalHosts);
+        }
+        else if (upHosts < totalHosts / 2)
+        {
+            _logger.LogWarning("Local datacenter '{DC}' is DEGRADED: only {Up}/{Total} hosts available", 
+                _options.MultiDC.LocalDatacenter, upHosts, totalHosts);
+        }
+        else if (upHosts < totalHosts)
+        {
+            _logger.LogInformation("Local datacenter '{DC}' status: {Up}/{Total} hosts available", 
+                _options.MultiDC.LocalDatacenter, upHosts, totalHosts);
         }
     }
     
@@ -626,33 +674,36 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
     
     private void OnHostFailed(Host host)
     {
-        // Additional recovery actions when host fails
+        // Only care about failures in our local datacenter
+        if (!string.Equals(host.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogDebug("Ignoring host failure in remote DC: {Host} DC={DC}", 
+                host.Address, host.Datacenter);
+            return;
+        }
+        
+        // Additional recovery actions when local DC host fails
         Task.Run(async () =>
         {
             await Task.Delay(TimeSpan.FromSeconds(5));
             
-            // Check if this affects local DC availability
-            var localDatacenter = _options.MultiDC.LocalDatacenter ?? host.Datacenter;
-            
-            if (!string.IsNullOrEmpty(localDatacenter))
-            {
-                var localDCHosts = _cluster.AllHosts()
-                    .Where(h => h.Datacenter == localDatacenter)
-                    .ToList();
-                    
-                var upInLocalDC = localDCHosts.Count(h => h.IsUp);
-                var totalInLocalDC = localDCHosts.Count;
+            // Check local DC availability
+            var localDCHosts = _cluster.AllHosts()
+                .Where(h => string.Equals(h.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
                 
-                if (upInLocalDC == 0 && totalInLocalDC > 0)
-                {
-                    _logger.LogCritical("All {Total} hosts in datacenter '{DC}' are DOWN!", 
-                        totalInLocalDC, localDatacenter);
-                }
-                else if (upInLocalDC < totalInLocalDC)
-                {
-                    _logger.LogWarning("{Up}/{Total} hosts remain UP in datacenter '{DC}'",
-                        upInLocalDC, totalInLocalDC, localDatacenter);
-                }
+            var upInLocalDC = localDCHosts.Count(h => h.IsUp);
+            var totalInLocalDC = localDCHosts.Count;
+            
+            if (upInLocalDC == 0 && totalInLocalDC > 0)
+            {
+                _logger.LogCritical("All {Total} hosts in local datacenter '{DC}' are DOWN!", 
+                    totalInLocalDC, _options.MultiDC.LocalDatacenter);
+            }
+            else if (upInLocalDC < totalInLocalDC)
+            {
+                _logger.LogWarning("{Up}/{Total} hosts remain UP in local datacenter '{DC}'",
+                    upInLocalDC, totalInLocalDC, _options.MultiDC.LocalDatacenter);
             }
         });
     }
@@ -682,8 +733,12 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             // Force metadata refresh
             await session.ExecuteAsync(new SimpleStatement("SELECT key FROM system.local"));
             
-            // Test each host connection
-            var tasks = _cluster.AllHosts().Select(h => TestHostConnection(h, aggressive: false)).ToArray();
+            // Test only local DC host connections
+            var localDcHosts = _cluster.AllHosts()
+                .Where(h => string.Equals(h.Datacenter, _options.MultiDC.LocalDatacenter, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+                
+            var tasks = localDcHosts.Select(h => TestHostConnection(h, aggressive: false)).ToArray();
             var results = await Task.WhenAll(tasks);
             
             var successCount = results.Count(r => r);

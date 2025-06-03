@@ -13,6 +13,7 @@ public class ResilientClientContactPointTests
 {
     private readonly Mock<ILogger<ResilientCassandraClient>> _loggerMock;
     private readonly ProbeConfiguration _configuration;
+    private readonly ResilientClientOptions _defaultOptions;
 
     public ResilientClientContactPointTests()
     {
@@ -27,6 +28,28 @@ public class ResilientClientContactPointTests
             Logging = new LoggingSettings(),
             Scheduling = new SchedulingSettings()
         };
+        _defaultOptions = new ResilientClientOptions
+        {
+            MultiDC = new MultiDCConfiguration { LocalDatacenter = "datacenter1" }
+        };
+    }
+
+    [Fact]
+    public void ResilientClient_ShouldRequireLocalDatacenter()
+    {
+        // Arrange
+        _configuration.ContactPoints = new List<string> { "localhost:9042" };
+        var optionsWithoutDc = new ResilientClientOptions();
+
+        // Act & Assert
+        var exception = Record.Exception(() =>
+        {
+            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object, optionsWithoutDc);
+        });
+
+        exception.Should().NotBeNull();
+        exception.Should().BeOfType<ArgumentException>();
+        exception!.Message.Should().Contain("LocalDatacenter must be specified");
     }
 
     [Theory]
@@ -42,7 +65,7 @@ public class ResilientClientContactPointTests
         // Act & Assert - Should not throw
         var exception = Record.Exception(() =>
         {
-            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object);
+            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object, _defaultOptions);
         });
 
         // The client will fail to connect (no Cassandra running) but should parse the contact point correctly
@@ -63,7 +86,7 @@ public class ResilientClientContactPointTests
         // Act & Assert - Should not throw parsing error
         var exception = Record.Exception(() =>
         {
-            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object);
+            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object, _defaultOptions);
         });
 
         // The client will fail to connect (no Cassandra running) but should parse the contact point correctly
@@ -85,7 +108,7 @@ public class ResilientClientContactPointTests
         // Act & Assert - Should not throw parsing error
         var exception = Record.Exception(() =>
         {
-            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object);
+            using var client = new ResilientCassandraClient(_configuration, _loggerMock.Object, _defaultOptions);
         });
 
         // The client will fail to connect (no Cassandra running) but should parse all contact points correctly

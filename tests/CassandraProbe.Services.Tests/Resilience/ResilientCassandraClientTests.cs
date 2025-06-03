@@ -48,10 +48,16 @@ public class ResilientCassandraClientTests : IDisposable
     [Fact]
     public void Constructor_LogsInitialization()
     {
-        // Arrange & Act
+        // Arrange
+        var options = new ResilientClientOptions
+        {
+            MultiDC = new MultiDCConfiguration { LocalDatacenter = "datacenter1" }
+        };
+        
+        // Act
         try
         {
-            var client = new ResilientCassandraClient(_configuration, _mockLogger.Object);
+            var client = new ResilientCassandraClient(_configuration, _mockLogger.Object, options);
             client.Dispose();
         }
         catch (ConnectionException)
@@ -69,6 +75,7 @@ public class ResilientCassandraClientTests : IDisposable
         // Arrange
         var options = new ResilientClientOptions
         {
+            MultiDC = new MultiDCConfiguration { LocalDatacenter = "us-east-1" },
             HostMonitoringInterval = TimeSpan.FromSeconds(10),
             ConnectionRefreshInterval = TimeSpan.FromMinutes(2),
             MaxRetryAttempts = 5
