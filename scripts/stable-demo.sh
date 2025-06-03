@@ -253,7 +253,8 @@ main() {
     cd "$PROJECT_ROOT"
     dotnet run --project src/CassandraProbe.Cli -- \
         --contact-points localhost:$CONTAINER_PORT \
-        --resilient-client \
+        --datacenter datacenter1 \
+        --resilient-demo \
         --test-cql "INSERT INTO resilient_test.test_table (id, timestamp, value) VALUES (uuid(), toTimestamp(now()), 'extended test')" \
         -i 2 \
         -d 300 \

@@ -1,0 +1,201 @@
+title ResilientCassandraClient - Comprehensive Behavior
+
+participant App as "Application"
+participant RC as "ResilientClient"
+participant HM as "Host Monitor\n(Timer: 5s)"
+participant CR as "Connection Refresh\n(Timer: 60s)"
+participant HC as "Health Check\n(Timer: 30s)"
+participant CB as "Circuit Breaker\n(Per Host)"
+participant Cluster as "Cassandra Cluster"
+participant LocalDC as "Local DC Hosts"
+participant RemoteDC as "Remote DC Hosts"
+
+note over App,RemoteDC: Initialization Phase
+
+App->RC: new ResilientCassandraClient(config, logger, options)
+activate RC
+
+RC->RC: Validate LocalDatacenter is provided
+note right of RC: Throws ArgumentException\nif LocalDatacenter is null
+
+RC->Cluster: BuildResilientCluster()
+activate Cluster
+Cluster->RC: ICluster instance
+deactivate Cluster
+
+RC->RC: RegisterClusterEventHandlers()
+note right of RC: Subscribes to:\n- HostAdded\n- HostRemoved
+
+RC->Cluster: Connect()
+activate Cluster
+Cluster->RC: ISession
+deactivate Cluster
+
+RC->LocalDC: Query local DC hosts only
+activate LocalDC
+LocalDC->RC: List of hosts in LocalDatacenter
+deactivate LocalDC
+
+RC->RC: InitializeHostStates()
+note right of RC: Only monitors hosts\nin LocalDatacenter
+
+RC->HM: Start Host Monitor Timer
+RC->CR: Start Connection Refresh Timer
+RC->HC: Start Health Check Timer
+
+RC->App: Client Ready
+deactivate RC
+
+note over App,RemoteDC: Normal Operation - Query Execution
+
+App->RC: ExecuteAsync(query)
+activate RC
+
+RC->RC: Check Operation Mode
+alt Operation Mode = Normal
+    RC->CB: Check circuit breaker state
+    CB->RC: Circuit state (Open/Closed/HalfOpen)
+    
+    alt Circuit Closed
+        RC->Cluster: Execute query
+        activate Cluster
+        Cluster->LocalDC: Route to local DC host
+        activate LocalDC
+        LocalDC->Cluster: Query result
+        deactivate LocalDC
+        Cluster->RC: Success
+        deactivate Cluster
+        RC->CB: RecordSuccess()
+        RC->App: Query result
+    else Circuit Open
+        RC->App: Throw CircuitBreakerOpenException
+    end
+else Operation Mode = Emergency
+    RC->App: Throw InvalidOperationException
+end
+
+deactivate RC
+
+note over App,RemoteDC: Background Monitoring - Host State Changes
+
+HM->LocalDC: Check all local DC hosts
+activate HM
+activate LocalDC
+LocalDC->HM: Host states
+deactivate LocalDC
+
+loop For each local DC host
+    HM->RC: Update host state
+    alt Host state changed
+        RC->RC: Log state transition
+        alt Host is DOWN
+            RC->RC: OnHostFailed()
+            RC->CB: RecordFailure()
+            RC->RC: Check local DC availability
+            note right of RC: Logs WARNING/CRITICAL\nbased on remaining hosts
+        else Host is UP
+            RC->RC: OnHostRecovered()
+            RC->CB: Reset()
+            RC->Cluster: AggressiveConnectionRefresh()
+        end
+    end
+end
+
+HM->RC: UpdateOperationMode()
+note right of RC: Normal → Degraded → ReadOnly → Emergency\nbased on available hosts
+deactivate HM
+
+note over App,RemoteDC: Topology Changes - Node Added
+
+Cluster->RC: HostAdded event
+activate RC
+RC->RC: Check if host.Datacenter == LocalDatacenter
+alt Host in Local DC
+    RC->RC: Add to _hostStates
+    RC->CB: Create circuit breaker for host
+    RC->LocalDC: PerformHostHealthCheck(host)
+    RC->RC: Log "Host ADDED in local DC"
+else Host in Remote DC
+    RC->RC: Log debug "Ignoring remote DC host"
+end
+deactivate RC
+
+note over App,RemoteDC: Connection Health Management
+
+CR->LocalDC: Test connections to all local DC hosts
+activate CR
+loop For each local DC host
+    CR->LocalDC: SELECT now() FROM system.local
+    alt Success
+        CR->RC: Update host metrics
+        CR->CB: RecordSuccess()
+    else Failure
+        CR->CB: RecordFailure()
+        CR->RC: Log warning
+    end
+end
+
+CR->RC: Identify recovered hosts
+loop For each recovered host
+    CR->Cluster: AggressiveConnectionRefresh(host)
+    note right of CR: Forces connection\npool refresh
+end
+deactivate CR
+
+note over App,RemoteDC: Session Health Checks
+
+HC->RC: IsSessionHealthyAsync()
+activate HC
+RC->Cluster: Execute health check query
+alt Query succeeds
+    HC->RC: Session healthy
+else Query fails
+    HC->RC: Trigger RecreateSessionAsync()
+    activate RC
+    RC->RC: Acquire recreation lock
+    RC->Cluster: Create new session
+    alt Success
+        RC->RC: Replace old session
+        RC->RC: Log "Session recreated"
+    else Failure
+        RC->RC: RecreateClusterAsync()
+        RC->Cluster: Build new cluster
+        RC->RC: RegisterClusterEventHandlers()
+        RC->Cluster: Connect()
+        RC->RC: InitializeHostStates()
+        RC->RC: Log "Cluster recreated"
+    end
+    deactivate RC
+end
+deactivate HC
+
+note over App,RemoteDC: Circuit Breaker State Management
+
+CB->CB: Track consecutive failures
+note right of CB: States:\nClosed → Open (after 5 failures)\nOpen → HalfOpen (after 30s)\nHalfOpen → Closed (after 2 successes)
+
+alt State = Open
+    CB->RC: Reject requests to host
+    note right of CB: Prevents connection\nstorms to failed hosts
+else State = HalfOpen
+    CB->RC: Allow limited requests
+    note right of CB: Testing recovery
+else State = Closed
+    CB->RC: Normal operation
+end
+
+note over App,RemoteDC: Graceful Shutdown
+
+App->RC: Dispose()
+activate RC
+RC->HM: Stop timer
+RC->CR: Stop timer
+RC->HC: Stop timer
+RC->Cluster: Unregister event handlers
+RC->Cluster: Dispose session
+RC->Cluster: Dispose cluster
+RC->App: Disposed
+deactivate RC
+
+note over App,RemoteDC: Key Benefits
+note right of RemoteDC: 1. Ignores remote DC events\n2. Automatic session/cluster recreation\n3. Circuit breakers prevent cascading failures\n4. Aggressive recovery for failed hosts\n5. No manual intervention required\n6. Clear operation modes for degraded states
