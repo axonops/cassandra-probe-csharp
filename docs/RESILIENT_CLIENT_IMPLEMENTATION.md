@@ -6,6 +6,73 @@ The `ResilientCassandraClient` provides true automatic recovery without requirin
 
 **Critical Configuration Requirement**: The resilient client REQUIRES a local datacenter to be specified. This ensures the client only monitors and reacts to issues in the datacenter it's configured to use, preventing unnecessary alerts and state changes from remote datacenter events. The client will throw an `ArgumentException` if `LocalDatacenter` is not provided.
 
+## Architecture Diagram
+
+### Interactive Diagram (GitHub/GitLab)
+
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant RC as ResilientClient
+    participant CB as Circuit Breaker
+    participant Cluster as Cassandra Cluster
+    participant LocalDC as Local DC Hosts
+
+    Note over App,LocalDC: Initialization Phase
+    
+    App->>RC: new ResilientCassandraClient(options)
+    RC->>RC: Validate LocalDatacenter (required)
+    RC->>Cluster: Build & Connect
+    RC->>LocalDC: Query local DC hosts only
+    RC->>RC: Start monitoring timers
+    RC-->>App: Client Ready
+
+    Note over App,LocalDC: Normal Query Execution
+    
+    App->>RC: ExecuteAsync(query)
+    RC->>CB: Check circuit state
+    alt Circuit Closed
+        RC->>Cluster: Execute query
+        Cluster->>LocalDC: Route to local DC
+        LocalDC-->>Cluster: Result
+        Cluster-->>RC: Success
+        RC->>CB: RecordSuccess()
+        RC-->>App: Query result
+    else Circuit Open
+        RC-->>App: CircuitBreakerOpenException
+    end
+
+    Note over App,LocalDC: Host Monitoring (every 5s)
+    
+    loop Host Monitor
+        RC->>LocalDC: Check host states
+        alt Host Failed
+            RC->>CB: RecordFailure()
+            RC->>RC: Update operation mode
+        else Host Recovered
+            RC->>CB: Reset()
+            RC->>Cluster: Refresh connections
+        end
+    end
+
+    Note over App,LocalDC: Automatic Recovery
+    
+    RC->>Cluster: Health check failed
+    RC->>RC: RecreateSessionAsync()
+    alt Session recreation fails
+        RC->>RC: RecreateClusterAsync()
+        RC->>Cluster: Build new cluster
+        RC->>RC: Re-initialize monitoring
+    end
+    RC-->>App: Recovery complete
+```
+
+### Full Sequence Diagram
+
+![ResilientCassandraClient Sequence Diagram](images/resilient-client-sequence.png)
+
+*The full diagram illustrates the complete behavior of the ResilientCassandraClient, including initialization, query execution, monitoring, topology changes, and recovery mechanisms. The diagram is auto-generated from [resilient-client-sequence.puml](resilient-client-sequence.puml).*
+
 ## Key Features
 
 ### 1. ✅ Automatic Session and Cluster Recreation

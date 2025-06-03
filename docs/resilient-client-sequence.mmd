@@ -1,0 +1,70 @@
+```mermaid
+sequenceDiagram
+    participant App as Application
+    participant RC as ResilientClient
+    participant CB as Circuit Breaker
+    participant Cluster as Cassandra Cluster
+    participant LocalDC as Local DC Hosts
+
+    Note over App,LocalDC: Initialization Phase
+    
+    App->>RC: new ResilientCassandraClient(options)
+    RC->>RC: Validate LocalDatacenter (required)
+    RC->>Cluster: Build & Connect
+    RC->>LocalDC: Query local DC hosts only
+    RC->>RC: Start monitoring timers
+    RC-->>App: Client Ready
+
+    Note over App,LocalDC: Normal Query Execution
+    
+    App->>RC: ExecuteAsync(query)
+    RC->>CB: Check circuit state
+    alt Circuit Closed
+        RC->>Cluster: Execute query
+        Cluster->>LocalDC: Route to local DC
+        LocalDC-->>Cluster: Result
+        Cluster-->>RC: Success
+        RC->>CB: RecordSuccess()
+        RC-->>App: Query result
+    else Circuit Open
+        RC-->>App: CircuitBreakerOpenException
+    end
+
+    Note over App,LocalDC: Host Monitoring (every 5s)
+    
+    loop Host Monitor
+        RC->>LocalDC: Check host states
+        alt Host Failed
+            RC->>CB: RecordFailure()
+            RC->>RC: Update operation mode
+        else Host Recovered
+            RC->>CB: Reset()
+            RC->>Cluster: Refresh connections
+        end
+    end
+
+    Note over App,LocalDC: Topology Changes
+    
+    Cluster-->>RC: HostAdded event
+    RC->>RC: Is host in LocalDatacenter?
+    alt Local DC host
+        RC->>RC: Add to monitoring
+        RC->>CB: Create circuit breaker
+    else Remote DC host
+        RC->>RC: Ignore (log only)
+    end
+
+    Note over App,LocalDC: Automatic Recovery
+    
+    RC->>Cluster: Health check failed
+    RC->>RC: RecreateSessionAsync()
+    alt Session recreation fails
+        RC->>RC: RecreateClusterAsync()
+        RC->>Cluster: Build new cluster
+        RC->>RC: Re-initialize monitoring
+    end
+    RC-->>App: Recovery complete
+
+    Note over App,LocalDC: Key Features
+    Note right of LocalDC: ✓ Datacenter-aware monitoring<br/>✓ Auto session/cluster recovery<br/>✓ Circuit breakers per host<br/>✓ No manual intervention<br/>✓ No restart required
+```

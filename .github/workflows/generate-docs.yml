@@ -1,0 +1,78 @@
+name: Generate Documentation Assets
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'docs/*.puml'
+      - 'docs/*.mmd'
+      - '.github/workflows/generate-docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'docs/*.puml'
+      - 'docs/*.mmd'
+      - '.github/workflows/generate-docs.yml'
+  workflow_dispatch:
+
+jobs:
+  generate-diagrams:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup Java
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    
+    - name: Create output directory
+      run: mkdir -p docs/images
+    
+    - name: Generate PlantUML Diagrams
+      run: |
+        # Download PlantUML jar
+        echo "Downloading PlantUML..."
+        curl -L -o plantuml.jar https://github.com/plantuml/plantuml/releases/download/v1.2024.0/plantuml-1.2024.0.jar
+        
+        # Generate both PNG and SVG for all PlantUML files
+        echo "Generating diagrams..."
+        for puml in docs/*.puml; do
+          if [ -f "$puml" ]; then
+            echo "Processing $puml..."
+            # Generate PNG
+            java -jar plantuml.jar -tpng "$puml" -o images
+            # Generate SVG  
+            java -jar plantuml.jar -tsvg "$puml" -o images
+          fi
+        done
+        
+        # List generated files
+        echo "Generated files:"
+        ls -la docs/images/
+    
+    - name: Upload diagram artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: documentation-diagrams
+        path: docs/images/
+        retention-days: 30
+    
+    - name: Commit diagrams (main branch only)
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        # Check if there are changes
+        if git diff --quiet docs/images/; then
+          echo "No changes to commit"
+        else
+          git add docs/images/
+          git commit -m "🤖 Auto-generate documentation diagrams"
+          
+          # Push changes
+          git push
+        fi
