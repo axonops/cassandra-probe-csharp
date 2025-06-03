@@ -59,11 +59,12 @@ dotnet run --project src/CassandraProbe.Cli -- \
     --log-level Information
 
 echo ""
-echo "2. Resilient Client (5 seconds):"
-echo "-------------------------------"
+echo "2. Resilient Client Demo (5 seconds):"
+echo "------------------------------------"
 dotnet run --project src/CassandraProbe.Cli -- \
     --contact-points "$CONTACT_POINT" \
-    --resilient-client \
+    --datacenter datacenter1 \
+    --resilient-demo \
     --test-cql "SELECT release_version FROM system.local" \
     -i 2 \
     -d 5 \

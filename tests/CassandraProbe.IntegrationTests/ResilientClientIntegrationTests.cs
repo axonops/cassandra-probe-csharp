@@ -137,6 +137,7 @@ public class ResilientClientIntegrationTests : IAsyncLifetime, IDisposable
         
         var options = new ResilientClientOptions
         {
+            MultiDC = new MultiDCConfiguration { LocalDatacenter = "datacenter1" },
             HostMonitoringInterval = TimeSpan.FromSeconds(2),
             ConnectionRefreshInterval = TimeSpan.FromSeconds(10),
             MaxRetryAttempts = 3
@@ -248,7 +249,11 @@ public class ResilientClientIntegrationTests : IAsyncLifetime, IDisposable
         var standardSessionManager = new SessionManager(sessionLogger, connectionMonitor.Object, config);
         var standardSession = await standardSessionManager.GetSessionAsync();
         
-        using var resilientClient = new ResilientCassandraClient(config, logger);
+        var resilientOptions = new ResilientClientOptions
+        {
+            MultiDC = new MultiDCConfiguration { LocalDatacenter = "datacenter1" }
+        };
+        using var resilientClient = new ResilientCassandraClient(config, logger, resilientOptions);
         
         // Prepare test data
         await standardSession.ExecuteAsync(new SimpleStatement(

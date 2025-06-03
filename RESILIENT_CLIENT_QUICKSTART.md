@@ -32,8 +32,8 @@ If you already have Cassandra running:
 curl -LO https://github.com/axonops/cassandra-probe-csharp/releases/latest/download/cassandra-probe-linux-x64.tar.gz
 tar -xzf cassandra-probe-linux-x64.tar.gz
 
-# Run the resilient client demo
-./cassandra-probe --contact-points your-cassandra:9042 --resilient-client
+# Run the resilient client demo (datacenter is required)
+./cassandra-probe --contact-points your-cassandra:9042 --datacenter dc1 --resilient-demo
 ```
 
 ## Key Features Demonstrated
@@ -68,7 +68,8 @@ Run continuous monitoring while testing failures:
 # Monitor with 5-second intervals for 10 minutes
 ./cassandra-probe \
   --contact-points node1:9042,node2:9042,node3:9042 \
-  --resilient-client \
+  --datacenter dc1 \
+  --resilient-demo \
   --interval 5 \
   --duration 10 \
   --connection-events \

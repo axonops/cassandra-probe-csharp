@@ -129,7 +129,7 @@ To address these challenges, we've implemented a production-grade resilient clie
 ### Try the Resilient Client Demo
 ```bash
 # See our approach to handling connection recovery
-./cassandra-probe --contact-points cluster:9042 --resilient-client
+./cassandra-probe --contact-points cluster:9042 --datacenter dc1 --resilient-demo
 ```
 
 📚 **[Resilient Client Quick Start Guide](RESILIENT_CLIENT_QUICKSTART.md)** - Get started testing the resilient client in minutes

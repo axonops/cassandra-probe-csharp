@@ -148,7 +148,8 @@ start_resilient_demo() {
     # Run the resilient client
     dotnet run --project src/CassandraProbe.Cli -- \
         --contact-points "localhost:9042,localhost:9043,localhost:9044" \
-        --resilient-client \
+        --datacenter datacenter1 \
+        --resilient-demo \
         --test-cql "INSERT INTO resilient_test.events (id, timestamp, message, scenario) VALUES (uuid(), toTimestamp(now()), 'Recovery test event', '$scenario')" \
         -i 2 \
         -d $DEMO_DURATION \

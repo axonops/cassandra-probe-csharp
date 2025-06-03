@@ -149,8 +149,8 @@ run_probe() {
     
     echo ""
     if [ "$client_type" = "resilient" ]; then
-        log "Running RESILIENT client for $duration seconds..."
-        local args="--resilient-client"
+        log "Running RESILIENT client demo for $duration seconds..."
+        local args="--datacenter datacenter1 --resilient-demo"
     else
         log "Running STANDARD client for $duration seconds..."
         local args=""

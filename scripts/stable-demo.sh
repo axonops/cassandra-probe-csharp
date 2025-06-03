@@ -188,7 +188,8 @@ run_resilient_demo() {
     # Run for a short time to demonstrate
     timeout 30s dotnet run --project src/CassandraProbe.Cli -- \
         --contact-points localhost:$CONTAINER_PORT \
-        --resilient-client \
+        --datacenter datacenter1 \
+        --resilient-demo \
         --test-cql "INSERT INTO resilient_test.test_table (id, timestamp, value) VALUES (uuid(), toTimestamp(now()), 'resilient client test')" \
         -i 2 \
         --log-level Information \
