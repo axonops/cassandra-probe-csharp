@@ -20,6 +20,8 @@ During our work with the DataStax C# driver for Apache Cassandra, we've encounte
 - `ICluster.HostAdded` - New node joins the cluster
 - `ICluster.HostRemoved` - Node permanently removed from cluster
 
+**Important Note:** These events are properly fired by the driver and can be reliably used to track topology changes. Our ResilientCassandraClient implementation uses these events to automatically adapt to cluster scaling.
+
 ### What We've Noticed
 In our testing, we've observed that the C# driver doesn't expose host state transition events (when nodes go up/down) to application code, unlike the Java driver which provides a `Host.StateListener` interface. While the driver appears to track these states internally, we haven't found a way to subscribe to these state changes in our applications.
 

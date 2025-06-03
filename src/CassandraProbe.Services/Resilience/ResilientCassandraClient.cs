@@ -102,6 +102,7 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         try
         {
             _cluster = BuildResilientCluster();
+            RegisterClusterEventHandlers();
             _session = _cluster.Connect();
             InitializeHostStates();
             
@@ -113,6 +114,63 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             _logger.LogError(ex, "Failed to establish initial connection");
             throw new ConnectionException("Failed to connect to Cassandra cluster", ex);
         }
+    }
+    
+    private void RegisterClusterEventHandlers()
+    {
+        if (_cluster == null) return;
+        
+        // Register topology change event handlers
+        _cluster.HostAdded += OnClusterHostAdded;
+        _cluster.HostRemoved += OnClusterHostRemoved;
+        
+        _logger.LogInformation("[RESILIENT CLIENT] Cluster topology event handlers registered");
+    }
+    
+    private void OnClusterHostAdded(Host host)
+    {
+        _logger.LogInformation("[TOPOLOGY CHANGE] Host ADDED: {Host} DC={DC} Rack={Rack}", 
+            host.Address, host.Datacenter, host.Rack);
+        
+        var hostAddress = host.Address.Address;
+        
+        // Add to monitoring if not already present
+        if (!_hostStates.ContainsKey(hostAddress))
+        {
+            _hostStates[hostAddress] = new HostStateInfo
+            {
+                IsUp = host.IsUp,
+                LastSeen = DateTime.UtcNow,
+                LastStateChange = DateTime.UtcNow,
+                ConsecutiveFailures = 0,
+                Datacenter = host.Datacenter
+            };
+            
+            _circuitBreakers[hostAddress] = new CircuitBreakerState(_options.CircuitBreaker);
+            
+            _logger.LogInformation("[RESILIENT CLIENT] Added host {Host} to monitoring (State: {State})",
+                hostAddress, host.IsUp ? "UP" : "DOWN");
+        }
+        
+        // Trigger immediate health check for the new host
+        Task.Run(async () => await PerformHostHealthCheck(host));
+    }
+    
+    private void OnClusterHostRemoved(Host host)
+    {
+        _logger.LogInformation("[TOPOLOGY CHANGE] Host REMOVED: {Host}", host.Address);
+        
+        var hostAddress = host.Address.Address;
+        
+        // Remove from monitoring
+        if (_hostStates.TryRemove(hostAddress, out var removedState))
+        {
+            _logger.LogInformation("[RESILIENT CLIENT] Removed host {Host} from monitoring (was {State})",
+                hostAddress, removedState.IsUp ? "UP" : "DOWN");
+        }
+        
+        // Remove circuit breaker
+        _circuitBreakers.TryRemove(hostAddress, out _);
     }
     
     private async Task<ISession> GetHealthySessionAsync()
@@ -202,6 +260,9 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         {
             // Create new cluster
             _cluster = BuildResilientCluster();
+            
+            // Re-register event handlers for the new cluster
+            RegisterClusterEventHandlers();
             
             // Create new session
             _session = await _cluster.ConnectAsync();
@@ -431,25 +492,33 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
                 }
                 else
                 {
-                    // New host discovered
+                    // New host discovered through polling (backup for event-based discovery)
                     _hostStates[hostAddress] = new HostStateInfo
                     {
                         IsUp = currentState,
                         LastSeen = DateTime.UtcNow,
-                        LastStateChange = DateTime.UtcNow
+                        LastStateChange = DateTime.UtcNow,
+                        ConsecutiveFailures = 0,
+                        Datacenter = host.Datacenter
                     };
+                    
+                    // Add circuit breaker if missing
+                    if (!_circuitBreakers.ContainsKey(hostAddress))
+                    {
+                        _circuitBreakers[hostAddress] = new CircuitBreakerState(_options.CircuitBreaker);
+                    }
                     
                     if (currentState)
                     {
                         _logger.LogInformation(
-                            "[RESILIENT CLIENT] New host discovered: {Host} (UP)",
-                            hostAddress);
+                            "[TOPOLOGY REFRESH] New host discovered via polling: {Host} DC={DC} (UP)",
+                            hostAddress, host.Datacenter);
                     }
                     else
                     {
                         _logger.LogWarning(
-                            "[RESILIENT CLIENT] New host discovered: {Host} (DOWN)",
-                            hostAddress);
+                            "[TOPOLOGY REFRESH] New host discovered via polling: {Host} DC={DC} (DOWN)",
+                            hostAddress, host.Datacenter);
                     }
                 }
             }
@@ -460,11 +529,14 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
             
             foreach (var removed in removedHosts)
             {
-                if (_hostStates.TryRemove(removed, out _))
+                if (_hostStates.TryRemove(removed, out var removedState))
                 {
                     _logger.LogInformation(
-                        "[RESILIENT CLIENT] Host {Host} removed from cluster",
-                        removed);
+                        "[TOPOLOGY REFRESH] Host {Host} removed via polling (was {State})",
+                        removed, removedState.IsUp ? "UP" : "DOWN");
+                    
+                    // Also remove circuit breaker
+                    _circuitBreakers.TryRemove(removed, out _);
                 }
             }
             
@@ -639,6 +711,37 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error during connection refresh");
+        }
+    }
+    
+    private async Task PerformHostHealthCheck(Host host)
+    {
+        try
+        {
+            var statement = new SimpleStatement("SELECT now() FROM system.local")
+                .SetHost(host)
+                .SetIdempotence(true)
+                .SetConsistencyLevel(ConsistencyLevel.LocalOne)
+                .SetReadTimeoutMillis(2000);
+                
+            await _session.ExecuteAsync(statement);
+            
+            // Host is healthy
+            if (_hostStates.TryGetValue(host.Address.Address, out var state))
+            {
+                state.LastSeen = DateTime.UtcNow;
+                if (!state.IsUp)
+                {
+                    state.IsUp = true;
+                    state.LastStateChange = DateTime.UtcNow;
+                    _logger.LogInformation("[HOST HEALTH CHECK] Host {Host} is now UP", host.Address);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning("Host {Host} health check failed: {Error}", 
+                host.Address, ex.Message);
         }
     }
     
@@ -1085,6 +1188,13 @@ public class ResilientCassandraClient : IResilientCassandraClient, IDisposable
         _hostMonitorTimer?.Dispose();
         _connectionRefreshTimer?.Dispose();
         _healthCheckTimer?.Dispose();
+        
+        // Unregister event handlers before disposing cluster
+        if (_cluster != null)
+        {
+            _cluster.HostAdded -= OnClusterHostAdded;
+            _cluster.HostRemoved -= OnClusterHostRemoved;
+        }
         
         _session?.Dispose();
         _cluster?.Dispose();

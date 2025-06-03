@@ -55,7 +55,27 @@ HalfOpen → Test recovery with limited requests
 - Faster query execution by avoiding known-bad hosts
 - Automatic recovery testing
 
-### 3. ✅ Multi-Datacenter Support and Monitoring
+### 3. ✅ Dynamic Topology Change Handling
+
+The client automatically detects and adapts to cluster topology changes:
+
+```csharp
+// Event-based detection (primary)
+cluster.HostAdded += OnClusterHostAdded;    // New node joins
+cluster.HostRemoved += OnClusterHostRemoved; // Node decommissioned
+
+// Polling-based detection (fallback)
+// Every 5 seconds, verifies topology matches expectations
+// Handles cases where events might be missed
+```
+
+**Benefits:**
+- Automatically monitors new nodes added to cluster
+- Removes monitoring for decommissioned nodes
+- No manual intervention needed for cluster scaling
+- Failsafe polling ensures no changes are missed
+
+### 4. ✅ Multi-Datacenter Support and Monitoring
 
 Enhanced multi-DC configuration with per-DC health tracking.
 
@@ -81,7 +101,7 @@ var options = new ResilientClientOptions
 - DC-aware health monitoring
 - Configurable remote DC usage
 
-### 4. ✅ Graceful Degradation Modes
+### 5. ✅ Graceful Degradation Modes
 
 The client automatically adjusts behavior based on cluster health:
 
@@ -119,7 +139,7 @@ public class ConsistencyDowngradeRetryPolicy : IRetryPolicy
 - Gives applications full control over consistency levels
 - Clear operational state visibility
 
-### 5. ✅ Aggressive Connection Recovery
+### 6. ✅ Aggressive Connection Recovery
 
 Enhanced connection refresh for recovered hosts:
 
